@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
+
 ### Implementation of the energy data synthesizer ammended from Pyraformer
 class SynthesisTS:
     '''
@@ -82,6 +84,34 @@ class SynthesisTS:
         noise = np.random.multivariate_normal(mean, cov, (self.series_amount,), 'raise')
         return noise
         
+    def synthesze_single_series(self):
+        '''
+        Generates a single time series with a date-time index.
+        '''
+        # Generate initial time stamp
+        init_date_stamp = pd.Timestamp('2022-01-01 00:00:00')
+        # Generate fake hour within month of january
+        # "Start of each time series t_0 is uniformly sampled from [0, 720]" - comment from paper
+        start = int(np.random.uniform(0, self.cycle_periods[-1]))
+        # Generate time points for the _generate_sin ---- May be reduntand after the datestamp generation was added
+        time_points = start + np.arange(self.seq_len)
+        # Obtain 'real' start date of the series
+        real_start_date = init_date_stamp + pd.to_timedelta(start, 'H')
+        # Generate datetime index for entire sequence
+        datetime_index = pd.date_range(start=real_start_date, periods=self.seq_len, freq='H')
+        # "Coefficients of the three sine functions B_1, B_2, B_3 for each time series sampled uniformly from [5, 10]"
+        sin_coefficients = np.random.uniform(5, 10, 3)
+        # Generate time series
+        y = self._generate_sin(time_points, sin_coefficients)
+        # Define mean and covariance of the noise term B_0 - a Gaussian process with a polynomially decaying covariance function.
+        mean, cov = self._polynomial_decay_cov()
+        # Draw B_0 -s for each time point t for each time series from Gaussian distribution
+        noise = self._multivariate_normal(mean, cov) 
+        series = y + noise
+        df = pd.DataFrame({'date': datetime_index, 'TARGET': series.squeeze()})
+
+        return df  
+
     def synthesize_data(self, generate_covariates=True):
         '''
         Main method that synthesizes the time series and their covariates (optional).
