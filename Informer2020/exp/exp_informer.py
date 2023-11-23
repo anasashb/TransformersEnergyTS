@@ -1,4 +1,4 @@
-from data.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Dataset_SYNTH_hour, Dataset_Custom, Dataset_Pred
+from data.data_loader import Dataset_ETT_hour, Dataset_ETT_minute, Dataset_SYNTH_hour, Dataset_WIND_hour, Dataset_Custom, Dataset_Pred
 from exp.exp_basic import Exp_Basic
 from models.model import Informer, InformerStack
 
@@ -70,7 +70,9 @@ class Exp_Informer(Exp_Basic):
             'Solar':Dataset_Custom,
             'custom':Dataset_Custom,
             'SYNTHh1':Dataset_SYNTH_hour,
-            'SYNTHh2':Dataset_SYNTH_hour
+            'SYNTHh2':Dataset_SYNTH_hour,
+            'DEWINDh_large': Dataset_WIND_hour,
+            'DEWINDh_small': Dataset_WIND_hour
         }
         Data = data_dict[self.args.data]
         timeenc = 0 if args.embed!='timeF' else 1
