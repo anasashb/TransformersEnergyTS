@@ -84,7 +84,7 @@ class SynthesisTS:
         noise = np.random.multivariate_normal(mean, cov, (self.series_amount,), 'raise')
         return noise
         
-    def synthesze_single_series(self):
+    def synthesize_single_series(self):
         '''
         Generates a single time series with a date-time index.
         '''
