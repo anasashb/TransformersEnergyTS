@@ -212,6 +212,7 @@ class Exp_Informer(Exp_Basic):
         return self.model
 
     def test(self, setting):
+
         test_data, test_loader = self._get_data(flag='test')
         
         self.model.eval()
@@ -318,5 +319,6 @@ class Exp_Informer(Exp_Basic):
             outputs = dataset_object.inverse_transform(outputs)
         f_dim = -1 if self.args.features=='MS' else 0
         batch_y = batch_y[:,-self.args.pred_len:,f_dim:].to(self.device)
-
+ 
         return outputs, batch_y
+ 
