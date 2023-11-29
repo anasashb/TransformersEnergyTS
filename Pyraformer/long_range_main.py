@@ -22,6 +22,7 @@ def prepare_dataloader(args):
         'elect':Dataset_Custom,
         'flow': Dataset_Custom,
         'synthetic': Dataset_Synthetic,
+        'wind' : Dataset_Custom, # Added JTF
     }
     Data = data_dict[args.data]
 
@@ -84,7 +85,8 @@ def dataset_parameters(args, dataset):
         'ETTm2':7,
         'elect':1,
         'flow': 1,
-        'synthetic': 1
+        'synthetic': 1,
+        'wind':1, # Added JTF
     }
     dataset2cov_size = {
         'ETTh1':4,
@@ -94,6 +96,7 @@ def dataset_parameters(args, dataset):
         'elect':3,
         'flow': 3,
         'synthetic': 3,
+        'wind':3, # Added JTF
     }
     dataset2seq_num = {
         'ETTh1':1,
@@ -102,7 +105,8 @@ def dataset_parameters(args, dataset):
         'ETTm2':1,
         'elect':321,
         'flow': 1077,
-        'synthetic': 60
+        'synthetic': 1, # Changed JTF
+        'wind':1, # Added JTF
     }
     dataset2embed = {
         'ETTh1':'DataEmbedding',
@@ -111,7 +115,8 @@ def dataset_parameters(args, dataset):
         'ETTm2':'DataEmbedding',
         'elect':'CustomEmbedding',
         'flow': 'CustomEmbedding',
-        'synthetic': 'CustomEmbedding'
+        'synthetic': 'CustomEmbedding',
+        'wind':'CustomEmbedding' # Added JTF
     }
 
     args.enc_in = dataset2enc_in[dataset]

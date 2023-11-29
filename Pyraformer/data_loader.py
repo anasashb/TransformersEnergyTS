@@ -358,6 +358,31 @@ def preprocess_elect(csv_path):
 
     return all_data.astype(np.float32), covariates.astype(np.float32), train_end
 
+def preprocess_wind(csv_path):
+    """preprocess the elect dataset for long range forecasting"""
+    num_covariates = 4
+    train_start = '2014-01-05 04:00:00'
+    train_end = '2015-05-31 23:00:00'
+    test_start = '2015-06-01 00:00:00'
+    test_end = '2015-12-31 23:00:00'
+
+    data_frame = pd.read_csv(csv_path, sep=",", index_col=0, parse_dates=True, decimal='.')
+    data_frame = data_frame.resample('1H',label = 'left',closed = 'right').sum()[train_start:test_end]
+    data_frame.fillna(0, inplace=True)
+
+    covariates = gen_covariates(data_frame[train_start:test_end].index, num_covariates)
+    all_data = data_frame[train_start:test_end].values
+    data_start = (all_data!=0).argmax(axis=0) #find first nonzero value in each time series
+    train_end = len(data_frame[train_start:train_end].values)
+
+    all_data = all_data[:, data_start < 10000]
+    data_start = data_start[data_start < 10000]
+    split_start = data_start.max()
+    all_data = all_data[split_start:]
+    covariates = covariates[split_start:]
+    train_end = train_end - split_start
+
+    return all_data.astype(np.float32), covariates.astype(np.float32), train_end
 
 def preprocess_flow(csv_path):
     """preprocess the app flow dataset for long range forecasting"""

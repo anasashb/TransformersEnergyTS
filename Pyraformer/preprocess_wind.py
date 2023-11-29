@@ -8,6 +8,7 @@ import os
 
 def load_data(datadir):
     df = pd.read_csv(datadir)
+    df = df.drop("date", axis =1)
     data = (df.values).transpose(1, 0)
 
     return data
@@ -83,7 +84,11 @@ def save(data, v, save_dir):
 
 
 if __name__ == '__main__':
-    datadir = 'data/EMHIRESPV_TSh_CF_Country_19862015.csv'
+#    datadir = 'WINDataset/DEWINDh_large.csv'
+#    all_data = load_data(datadir)
+#    covariates = get_covariates(len(all_data[0]), '1986-01-01 00:00:00')
+#    split_seq(all_data, covariates, 192, 24, 24, 'data/wind/large/')
+    datadir = os.path.join('..', 'WINDataset/DEWINDh_small.csv')
     all_data = load_data(datadir)
-    covariates = get_covariates(len(all_data[0]), '1986-01-01 00:00:00')
-    split_seq(all_data, covariates, 192, 24, 24, 'data/wind/')
+    covariates = get_covariates(len(all_data[0]), '2014-01-05 04:00:00')
+    split_seq(all_data, covariates, 192, 24, 24, 'data/wind/small/')
