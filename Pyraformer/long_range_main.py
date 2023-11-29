@@ -105,7 +105,7 @@ def dataset_parameters(args, dataset):
         'ETTm2':1,
         'elect':321,
         'flow': 1077,
-        'synthetic': 1, # Changed JTF
+        'synthetic': 60, # Changed JTF
         'wind':1, # Added JTF
     }
     dataset2embed = {

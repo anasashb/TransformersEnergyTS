@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import os
 
 def convert_and_save_dataframe(file_path):
@@ -11,6 +11,9 @@ def convert_and_save_dataframe(file_path):
     # Extract day, hour, month, and year from the date
     output_df = pd.DataFrame()
     output_df['value'] = input_df['TARGET']
+
+    standard_scaler = StandardScaler()
+    output_df['value'] = standard_scaler.fit_transform(output_df[['value']])
     output_df['day'] = input_df['date'].dt.day
     output_df['hour'] = input_df['date'].dt.hour
     output_df['month'] = input_df['date'].dt.month
