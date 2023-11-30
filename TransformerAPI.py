@@ -5,11 +5,14 @@
 # Imports
 import time
 import math
+import pandas as pd
+import numpy as np
 from math import sqrt
 import os
 from pandas.tseries import offsets
 from pandas.tseries.frequencies import to_offset
 from typing import List
+import torch
 from torch.utils.data import Dataset, DataLoader
 from torch import optim
 import torch.nn as nn
@@ -1382,14 +1385,13 @@ class Exp_Informer(Exp_Basic):
         # Compute model evaluation metrics
         mae, mse, rmse, mape, mspe = metric(preds, trues)
         print('mse:{}, mae:{}'.format(mse, mae))
-
+        all_metrics = np.array([mae, mse, rmse, mape, mspe])
         np.save(folder_path+'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
         np.save(folder_path+'pred.npy', preds)
         np.save(folder_path+'true.npy', trues)
         
         # We added returning predictions and true values per window, as well as overall MSE and MAE scores and the first batch of the test set
-        return preds, trues, mse, mae, first_batch_test
-    
+        return preds, trues, mse, mae, all_metrics, first_batch_test
     # Method deactivated as it is currently not supported
     #def predict(self, setting, load=False):
         #pred_data, pred_loader = self._get_data(flag='pred')
@@ -1604,12 +1606,12 @@ class InformerTS():
         Makes predictions on pre-defined test set. Does not require any arguments.
         Returns:
             preds: A 3D array of predictions of the following shape (number of windows, number of time points per window, number of targets.)
-            As self variables, trues, mse, mae, and first_batch_test can also be called. 
+            As self variables, trues, mse, mae, all_metrics, and first_batch_test can also be called. 
         '''
         if not self.model:
             raise ValueError('No model trained. Make sure to run .fit() first.')
         # Predict
-        self.preds, self.trues, self.mse, self.mae, self.first_batch_test = self.experiment_model.test(self.setting)
+        self.preds, self.trues, self.mse, self.mae, self.all_metrics, self.first_batch_test = self.experiment_model.test(self.setting)
         # Clear memory
         torch.cuda.empty_cache()
         return self.preds
