@@ -171,7 +171,7 @@ class Dataset_Custom(Dataset):
         self.all_data = torch.from_numpy(self.all_data).transpose(0, 1)
         self.covariates = torch.from_numpy(self.covariates)
         self.test_start = self.train_end - self.seq_len + 1
-        self.window_stride = 24
+        self.window_stride = 1 # changed from 24
         self.seq_num = self.all_data.size(0)
 
     def fit(self, data):
@@ -246,7 +246,7 @@ class Dataset_Synthetic(Dataset):
         self.all_data, self.covariates = self.all_data[:, :, 0], self.all_data[:, :, 1:]
         self.seq_num = self.all_data.size(0)
 
-        self.window_stride = 24
+        self.window_stride = 1 # changed from 24
         window_per_seq = (self.all_data.shape[1] - self.seq_len - self.pred_len) / self.window_stride
         self.train_end = self.seq_len + self.pred_len + int(0.9 * window_per_seq) * self.window_stride
         self.test_start = self.train_end - self.seq_len + 1
