@@ -179,7 +179,7 @@ def train_epoch(model, train_dataset, training_loader, optimizer, opt, epoch):
     return total_loss / total_pred_number
 
 
-def eval_epoch(model, test_dataset, test_loader, opt, epoch):
+def eval_epoch(model, test_dataset, test_loader, opt, epoch,iter_index):
     """ Epoch operation in evaluation phase. """
 
     model.eval()
@@ -212,6 +212,10 @@ def eval_epoch(model, test_dataset, test_loader, opt, epoch):
 
     preds = np.concatenate(preds, axis=0)
     trues = np.concatenate(trues, axis=0)
+
+    np.save('data/'+opt.data+'/predictions_'+opt.data+"_"+str(opt.predict_step)+"_"+str(iter_index)+".npy", preds)
+    np.save('data/'+opt.data+'/trues_'+opt.data+"_"+str(opt.predict_step)+"_"+str(iter_index)+".npy", trues)
+
     print('test shape:{}'.format(preds.shape))
     mae, mse, rmse, mape, mspe = metric(preds, trues)
     print('Epoch {}, mse:{}, mae:{}, rmse:{}, mape:{}, mspe:{}'.format(epoch, mse, mae, rmse, mape, mspe))
@@ -219,7 +223,7 @@ def eval_epoch(model, test_dataset, test_loader, opt, epoch):
     return mse, mae, rmse, mape, mspe
 
 
-def train(model, optimizer, scheduler, opt, model_save_dir):
+def train(model, optimizer, scheduler, opt, model_save_dir,iter_index):
     """ Start training. """
 
     best_mse = 100000000
@@ -239,7 +243,7 @@ def train(model, optimizer, scheduler, opt, model_save_dir):
               'elapse: {elapse:3.3f} min'
               .format(mse=train_mse, elapse=(time.time() - start) / 60))
 
-        mse, mae, rmse, mape, mspe = eval_epoch(model, test_dataset, test_dataloader, opt, epoch_i)
+        mse, mae, rmse, mape, mspe = eval_epoch(model, test_dataset, test_dataloader, opt, epoch_i,iter_index)
 
         scheduler.step()
 
@@ -258,7 +262,7 @@ def train(model, optimizer, scheduler, opt, model_save_dir):
     return best_metrics
 
 
-def evaluate(model, opt, model_save_dir):
+def evaluate(model, opt, model_save_dir,iter_index):
     """Evaluate preptrained models"""
     best_mse = 100000000
 
@@ -270,7 +274,7 @@ def evaluate(model, opt, model_save_dir):
     model.load_state_dict(checkpoint)
 
     best_metrics = []
-    mse, mae, rmse, mape, mspe = eval_epoch(model, test_dataset, test_dataloader, opt, 0)
+    mse, mae, rmse, mape, mspe = eval_epoch(model, test_dataset, test_dataloader, opt, 0,iter_index)
 
     current_metrics = [float(mse), float(mae), float(rmse), float(mape), float(mspe)]
     if best_mse > mse:
@@ -356,12 +360,12 @@ def main(opt, iter_index):
     os.makedirs(model_save_dir, exist_ok=True)
     model_save_dir += 'best_iter{}.pth'.format(iter_index)
     if opt.eval:
-        best_metrics = evaluate(model, opt, model_save_dir)
+        best_metrics = evaluate(model, opt, model_save_dir,iter_index)
     else:
         """ optimizer and scheduler """
         optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()), opt.lr)
         scheduler = optim.lr_scheduler.StepLR(optimizer, 1, gamma=opt.lr_step)
-        best_metrics = train(model, optimizer, scheduler, opt, model_save_dir)
+        best_metrics = train(model, optimizer, scheduler, opt, model_save_dir,iter_index)
 
     print('Iteration best metrics: {}'.format(best_metrics))
     return best_metrics
@@ -377,6 +381,8 @@ if __name__ == '__main__':
         metrics = main(opt, i)
         all_perf.append(metrics)
     all_perf = np.array(all_perf)
-    all_perf = all_perf.mean(0)
-    print('Average Metrics: {}'.format(all_perf))
+    mean_perf = all_perf.mean(0)
+    np.save('results/'+opt.data+"metrics"+opt.data+str(opt.predict_step)+".npy",all_perf.min(axis=0))
+    print('Average Metrics: {}'.format(mean_perf))
+    print('Best Iteration: {}'.format(np.argmin(np.min(all_perf,axis=0))))
 
