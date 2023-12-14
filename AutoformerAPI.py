@@ -3,6 +3,7 @@
 # Imports
 from typing import List
 import os
+import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -12,14 +13,12 @@ plt.switch_backend('agg')
 from pandas.tseries import offsets
 from pandas.tseries.frequencies import to_offset
 import torch
-from torch.utils.data import DataLoader
+from torch import optim
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils import weight_norm
 from sklearn.preprocessing import StandardScaler
-from utils.timefeatures import time_features
-from utils.masking import TriangularCausalMask, ProbMask
 from reformer_pytorch import LSHSelfAttention
 import argparse
 import warnings
@@ -138,21 +137,21 @@ class TriangularCausalMask():
 #  Standard Scaler ###########################################################################################  
 ## !!!Here we have a difference!!!
 
-class StandardScaler():
+### Commented out as it seems like it is not used in the code.
+#class StandardScaler():
     '''
     Straightforward StandardScaler class.
     Methods included are '.fit()', '.transform()', '.inverse_transform().'
     '''
-    class StandardScaler():
-    def __init__(self, mean, std):
-        self.mean = mean
-        self.std = std
+   # def __init__(self, mean, std):
+        #self.mean = mean
+        #self.std = std
 
-    def transform(self, data):
-        return (data - self.mean) / self.std
+    #def transform(self, data):
+        #return (data - self.mean) / self.std
 
-    def inverse_transform(self, data):
-        return (data * self.std) + self.mean
+    #def inverse_transform(self, data):
+        #return (data * self.std) + self.mean
 
 ###########################################################################################################################
 # Time Features #############################################################################################################
@@ -485,9 +484,10 @@ class Dataset_SYNTH_hour(Dataset):
 ## Here we have a difference!!! - In Informer this part is inside the model class
 
 data_dict = {
-    'Synth1': Dataset_SYNTH_hour,
-    'Synth2': Dataset_SYNTH_hour,
-    'Windh1': Dataset_WIND_hour,
+    'SYNTHh1': Dataset_SYNTH_hour,
+    'SYNTHh2': Dataset_SYNTH_hour,
+    'DEWINDh_large': Dataset_WIND_hour,
+    'DEWINDh_small': Dataset_WIND_hour
 }
 
 def data_provider(args, flag):
@@ -1227,13 +1227,13 @@ class Decoder(nn.Module):
 ### ENTIRE MODEL FRAMEWORKS ###############################################################################################
 # Autoformer  #######################################################################################################    
 
-class Model(nn.Module):
+class Autoformer(nn.Module):
     """
     Autoformer is the first method to achieve the series-wise connection,
     with inherent O(LlogL) complexity
     """
     def __init__(self, configs):
-        super(Model, self).__init__()
+        super(Autoformer, self).__init__()
         self.seq_len = configs.seq_len
         self.label_len = configs.label_len
         self.pred_len = configs.pred_len
@@ -1375,12 +1375,10 @@ class EarlyStopping:
 
 class Exp_Autoformer(Exp_Basic):
     '''
-    Exp_Main is the main class for the Autoformer architecture, which wraps up every component above.
-    Note that some of the lines are commented out, corresponding to features or implementations that 
-    are not supported in our work.  
+    Exp_Autoformer is the main class for the Autoformer architecture, which wraps up every component above. 
     '''
     def __init__(self, args):
-        super(Exp_Main, self).__init__(args)
+        super(Exp_Autoformer, self).__init__(args)
 
     def _build_model(self):
         model_dict = {
@@ -1389,7 +1387,7 @@ class Exp_Autoformer(Exp_Basic):
             #'Informer': Informer,
             #'Reformer': Reformer,
         }
-        model = model_dict[self.args.model].Model(self.args).float()
+        model = model_dict[self.args.model](self.args).float()
 
         if self.args.use_multi_gpu and self.args.use_gpu:
             model = nn.DataParallel(model, device_ids=self.args.device_ids)
@@ -1642,7 +1640,7 @@ class Exp_Autoformer(Exp_Basic):
 
 ###########################################################################################################################
 # Our Simple User Interface ###############################################################################################
-class Autoformer():
+class AutoformerTS():
     '''
     Our custom wrapper class to provide an user-friendly interface for fitting and testing the of the Autoformer model. 
     For simplicity of use, methods included align with naming used by Keras.  
@@ -1671,7 +1669,7 @@ class Autoformer():
         self.args.model = 'Autoformer'
         self.args.data = 'Synth1'
         self.args.features = 'S' #univariate
-        self.rgs.seq_len = 96
+        self.args.seq_len = 96
         self.args.label_len = 48
         self.args.pred_len = 24
         self.args.e_layers = 2
@@ -1752,7 +1750,7 @@ class Autoformer():
         self.args.pred_len = pred_len
         
        #self.args.detail_freq = self.args.freq
-       # self.args.freq = self.args.freq[-1:]
+       #self.args.freq = self.args.freq[-1:]
         
         print('Beginning to fit the model with the following arguments:')
         print(f'{self.args}')
