@@ -1562,7 +1562,7 @@ class Exp_Autoformer(Exp_Basic):
                     input = batch_x.detach().cpu().numpy()
                     gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
                     pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
-                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
+                    #visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
                 # Added line - saves the first batch of the test set.
                 if i == 0:
                     first_batch = {
@@ -1586,6 +1586,7 @@ class Exp_Autoformer(Exp_Basic):
             os.makedirs(folder_path)
         # Compute model evaluation metrics
         mae, mse, rmse, mape, mspe = metric(preds, trues)
+        all_metrics = np.array([mae, mse, rmse, mape, mspe])
         print('mse:{}, mae:{}'.format(mse, mae))
         f = open("result.txt", 'a')
         f.write(setting + "  \n")
@@ -1599,7 +1600,7 @@ class Exp_Autoformer(Exp_Basic):
         np.save(folder_path + 'true.npy', trues)
 
         # Added returned variables - predictions and true values per window, as well as overall MSE and MAE scores and the first batch of the test set
-        return mae, mse , preds , trues , first_batch
+        return preds , trues ,mae, mse , all_metrics, first_batch
 
     #Commented as this function is not used in our work
     #def predict(self, setting, load=False):
