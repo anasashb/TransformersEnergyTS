@@ -1775,8 +1775,8 @@ class AutoformerTS():
             preds: A 3D array of predictions of the following shape (number of windows, number of time points per window, number of targets.)
             As self variables, trues, mse, mae, all_metrics, and first_batch_test can also be called. 
         '''
-        if not self.model:
-            raise ValueError('No model trained. Make sure to run .fit() first.')
+        #if not self.model:
+            #raise ValueError('No model trained. Make sure to run .fit() first.')
         # Predict
         self.preds, self.trues, self.mse, self.mae, self.all_metrics, self.first_batch_test = self.experiment_model.test(self.setting)
         # Clear memory
