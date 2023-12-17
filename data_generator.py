@@ -12,7 +12,7 @@ class SynthesisTS:
     to reflect the order of operations in the synthesis process.
     Further documentation and comments were added.
     '''
-    def __init__(self, cycle_periods=[24, 168, 720], series_amount=60, seq_len=720*20):
+    def __init__(self, cycle_periods=[24, 168, 720], series_amount=1, seq_len=720*20):
         '''
         Args:
             cycle_periods (list[int1, int2, int3]): Cycle periods to model dependency. For hourly data = [24, 168, 720] which == [day, week, month].
@@ -24,7 +24,7 @@ class SynthesisTS:
         self.seq_len = seq_len
 
     # Generates the actual energy time series
-    def _generate_sin(self, time_points, sin_coefficients):
+    def _generate_sin(self, time_points, sin_coefficients, trend, trend_slope, trend_rate):
         '''
         Generates a mixed sinusoidal sequence given the amount of cycle periods, time points, and the amount of coefficients for individual sine functions.            
         '''
@@ -33,7 +33,20 @@ class SynthesisTS:
         # Generate individual sine functions to sum up
         for i in range(len(self.cycle_periods)):
             y += sin_coefficients[i] * np.sin(2 * np.pi / self.cycle_periods[i] * time_points)
-            
+        
+        # Handle trend if given
+        if trend == 'Additive':
+            trend_slope = trend_slope if trend_slope else 0.01
+            y += trend_slope * time_points
+        
+        
+        ######################## Problematic ####################### NEEDS FIX
+        # Handle trend if given
+        elif trend == 'Multiplicative':
+            trend_rate = trend_rate if trend_rate else 1e-5
+            time_scaling = time_points / 720
+            y *= np.exp(trend_rate * time_scaling)  
+        ############################################################ NEEDS FIX
         return y
         
     # Generates covariates (day of week, hour of day, month of year) for hourly data
@@ -84,10 +97,19 @@ class SynthesisTS:
         noise = np.random.multivariate_normal(mean, cov, (self.series_amount,), 'raise')
         return noise
         
-    def synthesize_single_series(self):
+    def synthesize_single_series(self, trend='None', trend_slope=None, trend_rate=None):
         '''
         Generates a single time series with a date-time index.
+
+        Args:
+            trend (str): Whether to incorporate a trend in the time series. 'None' for stationary series, 'Additive' for additive trend, and 'Multiplicative' for multiplicative trend.
+            trend_slope (float): (Optional) Slope parameter or additive trend. 0.0005 makes a slight trend for 17,420 data. 0.005 will make a more pronounced trend.
+            trend_rate (float): (Optional) Parameter (e^{trend_rate}) for multiplicative trend.
         '''
+        # Handle error for trend
+        if trend not in ['None', 'Additive', 'Multiplicative']:
+            raise ValueError("Please choose a valid trend parameter from: 'None', 'Additive', 'Multiplicative'.")
+        
         # Generate initial time stamp
         init_date_stamp = pd.Timestamp('2022-01-01 00:00:00')
         # Generate fake hour within month of january
@@ -102,7 +124,7 @@ class SynthesisTS:
         # "Coefficients of the three sine functions B_1, B_2, B_3 for each time series sampled uniformly from [5, 10]"
         sin_coefficients = np.random.uniform(5, 10, 3)
         # Generate time series
-        y = self._generate_sin(time_points, sin_coefficients)
+        y = self._generate_sin(time_points, sin_coefficients, trend, trend_slope, trend_rate)
         # Define mean and covariance of the noise term B_0 - a Gaussian process with a polynomially decaying covariance function.
         mean, cov = self._polynomial_decay_cov()
         # Draw B_0 -s for each time point t for each time series from Gaussian distribution
@@ -112,53 +134,6 @@ class SynthesisTS:
 
         return df  
 
-    def synthesize_data(self, generate_covariates=True):
-        '''
-        Main method that synthesizes the time series and their covariates (optional).
 
-        Returns: 
-            Time series datasets in the amount of series_amount
-        '''
-        # Empty containers
-        data = []
-        if generate_covariates:
-            covariates = []
-        # Iterator
-        i = 0
-        # Loop
-        # "We generate 60 time series"
-        while i < self.series_amount:
-            # "Start of each time series t_0 is uniformly sampled from [0, 720]" - comment from paper
-            start = int(np.random.uniform(0, self.cycle_periods[-1]))
-            # Generate time points 
-            time_points = start + np.arange(self.seq_len)
-            # "Coefficients of the three sine functions B_1, B_2, B_3 for each time series sampled uniformly from [5, 10]"
-            sin_coefficients = np.random.uniform(5, 10, 3)
-            # Generate time series
-            y = self._generate_sin(time_points, sin_coefficients)
-            # Append
-            data.append(y)
-            # If we want covariates
-            if generate_covariates:
-                # Generate and append covariates
-                covariates.append(self._gen_covariates(time_points, i))
-            # Update iterator
-            i += 1
-        # Turn results into array
-        data = np.array(data)
-        # Define mean and covariance of the noise term B_0 - a Gaussian process with a polynomially decaying covariance function.
-        mean, cov = self._polynomial_decay_cov()
-        # Draw B_0 -s for each time point t for each time series from Gaussian distribution
-        noise = self._multivariate_normal(mean, cov)
-        # Add B_0-s for each time point t
-        data = data + noise
-        # If we want covariates
-        if generate_covariates:
-            # Set up as np array
-            covariates = np.array(covariates)
-            # Concatenate with time series
-            data = np.concatenate([data[:, :, None], covariates], axis=2)
-            np.save('synthetic_series.npy', data)
-        return data
     
 
