@@ -29,23 +29,30 @@ class SynthesisTS:
         Generates a mixed sinusoidal sequence given the amount of cycle periods, time points, and the amount of coefficients for individual sine functions.            
         '''
         # Empty array corresponding to time points
-        y = np.zeros(len(time_points))
+        y = np.full(len(time_points),100.0)
+        print(f"Generated: {y[0],y[1],y[2]}")
         # Generate individual sine functions to sum up
         for i in range(len(self.cycle_periods)):
             y += sin_coefficients[i] * np.sin(2 * np.pi / self.cycle_periods[i] * time_points)
         
+        print(f"Generated: {y[0],y[1],y[2]}")
+
         # Handle trend if given
         if trend == 'Additive':
             trend_slope = trend_slope if trend_slope else 0.01
-            y += trend_slope * time_points
+            for i in range(0,len(time_points)):
+                y[i] += trend_slope * i
+            
+            print(f"Additive:{y[0],y[1],y[2]}")
         
         
         ######################## Problematic ####################### NEEDS FIX
         # Handle trend if given
         elif trend == 'Multiplicative':
-            trend_rate = trend_rate if trend_rate else 1e-5
-            time_scaling = time_points / 720
-            y *= np.exp(trend_rate * time_scaling)  
+            trend_rate = 1 + trend_rate
+            for i in range(0,len(time_points)):
+                y[i] = y[i] ** ((trend_rate ** i))
+            print(f"Multiplicative:{y[0],y[1],y[2]}") 
         ############################################################ NEEDS FIX
         return y
         
@@ -133,7 +140,3 @@ class SynthesisTS:
         df = pd.DataFrame({'date': datetime_index, 'TARGET': series.squeeze()})
 
         return df  
-
-
-    
-
