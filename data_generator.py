@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import random
 
 ### Implementation of the energy data synthesizer ammended from Pyraformer
 class SynthesisTS:
@@ -24,7 +25,7 @@ class SynthesisTS:
         self.seq_len = seq_len
 
     # Generates the actual energy time series
-    def _generate_sin(self, time_points, sin_coefficients, trend, trend_slope, trend_rate):
+    def _generate_sin(self, time_points, sin_coefficients, trend, trend_slope, trend_rate, structural_break, break_intensity):
         '''
         Generates a mixed sinusoidal sequence given the amount of cycle periods, time points, and the amount of coefficients for individual sine functions.            
         '''
@@ -46,14 +47,23 @@ class SynthesisTS:
             print(f"Additive:{y[0],y[1],y[2]}")
         
         
-        ######################## Problematic ####################### NEEDS FIX
+        
         # Handle trend if given
         elif trend == 'Multiplicative':
             trend_rate = 1 + trend_rate
             for i in range(0,len(time_points)):
                 y[i] = y[i] ** ((trend_rate ** i))
             print(f"Multiplicative:{y[0],y[1],y[2]}") 
-        ############################################################ NEEDS FIX
+       
+        
+    
+        if structural_break == True:
+        # Add in a structural break at a random point in time 
+            
+            break_point = random.randint(1,len(time_points))
+            for i in range(len(time_points)):
+                if i > break_point:
+                    y[i] += break_intensity
         return y
         
     # Generates covariates (day of week, hour of day, month of year) for hourly data
@@ -104,7 +114,7 @@ class SynthesisTS:
         noise = np.random.multivariate_normal(mean, cov, (self.series_amount,), 'raise')
         return noise
         
-    def synthesize_single_series(self, trend='None', trend_slope=None, trend_rate=None):
+    def synthesize_single_series(self, trend='None', trend_slope=None, trend_rate=None, structural_break = False, break_intensity = 50):
         '''
         Generates a single time series with a date-time index.
 
@@ -131,7 +141,7 @@ class SynthesisTS:
         # "Coefficients of the three sine functions B_1, B_2, B_3 for each time series sampled uniformly from [5, 10]"
         sin_coefficients = np.random.uniform(5, 10, 3)
         # Generate time series
-        y = self._generate_sin(time_points, sin_coefficients, trend, trend_slope, trend_rate)
+        y = self._generate_sin(time_points, sin_coefficients, trend, trend_slope, trend_rate, structural_break, break_intensity)
         # Define mean and covariance of the noise term B_0 - a Gaussian process with a polynomially decaying covariance function.
         mean, cov = self._polynomial_decay_cov()
         # Draw B_0 -s for each time point t for each time series from Gaussian distribution
