@@ -2343,6 +2343,13 @@ class Exp_Fedformer(Exp_Basic):
                     gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
                     pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
                     #visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
+                if i == 0:
+                    first_batch = {
+                    'batch_x' : batch_x ,
+                    'batch_y' : batch_y ,
+                    'batch_x_mark' : batch_x_mark ,
+                    'batch_y_mark' : batch_y_mark ,
+                    }
 
         preds = np.array(preds)
         trues = np.array(trues)
