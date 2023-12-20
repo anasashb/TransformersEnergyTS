@@ -1,42 +1,43 @@
-# A script file to easily and convinently run and use the Autoformer model. Includes a wrapper class for the model that can be imported and easily used for training and prediction.
+# A script file to easily and convinently run and use the Fedformer model. Includes a wrapper class for the model that can be imported and easily used for training and prediction.
 
 # Imports
 from typing import List
 import os
 import time
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
-import math
-from math import sqrt
-plt.switch_backend('agg')
+import pandas as pd
 from pandas.tseries import offsets
 from pandas.tseries.frequencies import to_offset
+import pdb
+from functools import partial
+from scipy.special import eval_legendre
+from sympy import Poly, legendre, Symbol, chebyshevt
+import math
+from math import sqrt, log2, ceil
+from typing import List, Tuple
+from functools import partial
+from einops import rearrange, reduce, repeat
+from sklearn.preprocessing import StandardScaler
 import torch
 from torch import optim
+from torch import nn, einsum, diagonal
+from torch import Tensor
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.functional import interpolate
 from torch.nn.utils import weight_norm
-from sklearn.preprocessing import StandardScaler
-from reformer_pytorch import LSHSelfAttention
-import argparse
 import warnings
+
 warnings.filterwarnings('ignore')
-import logging
-logging.basicConfig(format='%(asctime)s,%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
-    datefmt='%Y-%m-%d:%H:%M:%S',
-    level=logging.INFO)
-
-
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 ###########################################################################################################################
 # Dot dictionary ##########################################################################################################
+
 class dotdict(dict):
-    '''
-    Simple class to allow storing model arguments in a dot dictionary.
-    '''
+    '''Simple class to allow storing model arguments in a dot dictionary.'''
     __getattr__ = dict.get
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
@@ -110,15 +111,13 @@ class ProbMask():
         _mask = torch.ones(L, scores.shape[-1], dtype=torch.bool).to(device).triu(1)
         _mask_ex = _mask[None, None, :].expand(B, H, L, scores.shape[-1])
         indicator = _mask_ex[torch.arange(B)[:, None, None],
-                             torch.arange(H)[None, :, None],
-                             index, :].to(device)
+                    torch.arange(H)[None, :, None],
+                    index, :].to(device)
         self._mask = indicator.view(scores.shape).to(device)
-    
+
     @property
     def mask(self):
         return self._mask
-    
-
 
 class TriangularCausalMask():
     '''
@@ -132,26 +131,19 @@ class TriangularCausalMask():
     @property
     def mask(self):
         return self._mask
-    
-###########################################################################################################################
-#  Standard Scaler ###########################################################################################  
-## !!!Here we have a difference!!!
 
-### Commented out as it seems like it is not used in the code.
-#class StandardScaler():
-    '''
-    Straightforward StandardScaler class.
-    Methods included are '.fit()', '.transform()', '.inverse_transform().'
-    '''
-   # def __init__(self, mean, std):
-        #self.mean = mean
-        #self.std = std
-
-    #def transform(self, data):
-        #return (data - self.mean) / self.std
-
-    #def inverse_transform(self, data):
-        #return (data * self.std) + self.mean
+##Check if this class is implemented at all in the model. If not, remove it.
+class LocalMask():
+    def __init__(self, B, L,S,device="cpu"):
+        mask_shape = [B, 1, L, S]
+        with torch.no_grad():
+            self.len = math.ceil(np.log2(L))
+            self._mask1 = torch.triu(torch.ones(mask_shape, dtype=torch.bool), diagonal=1).to(device)
+            self._mask2 = ~torch.triu(torch.ones(mask_shape,dtype=torch.bool),diagonal=-self.len).to(device)
+            self._mask = self._mask1+self._mask2
+    @property
+    def mask(self):
+        return self._mask
 
 ###########################################################################################################################
 # Time Features #############################################################################################################
@@ -215,14 +207,13 @@ class MonthOfYear(TimeFeature):
     def __call__(self, index: pd.DatetimeIndex) -> np.ndarray:
         return (index.month - 1) / 11.0 - 0.5
 
-## !!!Here we have a difference!!!
+## Same as Autoformer, different from Informer
 class WeekOfYear(TimeFeature):
     """Week of year encoded as value between [-0.5, 0.5]"""
 
     def __call__(self, index: pd.DatetimeIndex) -> np.ndarray:
         return (index.isocalendar().week - 1) / 52.0 - 0.5
-
-
+    
 def time_features_from_frequency_str(freq_str: str) -> List[TimeFeature]:
     """
     Returns a list of time features that will be appropriate for the given frequency string.
@@ -279,9 +270,7 @@ def time_features_from_frequency_str(freq_str: str) -> List[TimeFeature]:
     """
     raise RuntimeError(supported_freq_msg)
 
-###########################################################################################################################
-# Timestamps ##############################################################################################################
-## !!!Here we have a difference!!!
+
 def time_features(dates, freq='h'):
     """
     > `time_features` takes in a `dates` dataframe with a 'dates' column and extracts the date down to `freq` where freq can be any of the following:
@@ -301,7 +290,7 @@ def time_features(dates, freq='h'):
 ## !!!Here we have a difference!!! - option for timeenc 0 or 1 in dataset classes unlike in time_features function as in Informer. Should  be simple to modify.
 class Dataset_WIND_hour(Dataset):
     '''
-    PyTorch dataloader class for the wind dataset, which constitutes a minor amendment of the original Autoformer dataloader for the ETT hourly.
+    PyTorch dataloader class for the wind dataset, which constitutes a minor amendment of the original Fedformer dataloader for the ETT hourly.
     Class comprehensively handles the train-val-test split, scaling, time-feature encoding. Further included (but unused at this point) method allows for reverse scaling. 
     '''
     def __init__(self, root_path, flag='train', size=None, 
@@ -496,14 +485,14 @@ def data_provider(args, flag):
 
     if flag == 'test':
         shuffle_flag = False
-        drop_last = False
+        drop_last = True
         batch_size = args.batch_size
         freq = args.freq
     elif flag == 'pred':
         shuffle_flag = False
         drop_last = False
         batch_size = 1
-        freq = args.freq
+        freq = args.detail_freq
         Data = Dataset_Pred
     else:
         shuffle_flag = True
@@ -532,9 +521,7 @@ def data_provider(args, flag):
 
 ###########################################################################################################################
 # Experiment class ########################################################################################################
-    '''
-    Parent class for fitting and testing. The actual model training class will inherit from this class. 
-    '''
+
 class Exp_Basic(object):
     def __init__(self, args):
         self.args = args
@@ -543,7 +530,6 @@ class Exp_Basic(object):
 
     def _build_model(self):
         raise NotImplementedError
-        return None
 
     def _acquire_device(self):
         if self.args.use_gpu:
@@ -556,46 +542,22 @@ class Exp_Basic(object):
             print('Use CPU')
         return device
 
-    def _get_data(self):
+    def _get_data(self, *args, **kwargs):
         pass
 
-    def vali(self):
+    def vali(self, *args, **kwargs):
         pass
 
-    def train(self):
+    def train(self, *args, **kwargs):
         pass
 
-    def test(self):
+    def test(self, *args, **kwargs):
         pass
 
 ###########################################################################################################################
 ### MODEL COMPONENTS ######################################################################################################
 # Data Embedding ##########################################################################################################
-## !!!Here we have a difference!!! - compared_version function for use in TokenEmbedding class. In Informer they just embed it in the class's code.
-def compared_version(ver1, ver2):
-    """
-    :param ver1
-    :param ver2
-    :return: ver1< = >ver2 False/True
-    """
-    list1 = str(ver1).split(".")
-    list2 = str(ver2).split(".")
-    
-    for i in range(len(list1)) if len(list1) < len(list2) else range(len(list2)):
-        if int(list1[i]) == int(list2[i]):
-            pass
-        elif int(list1[i]) < int(list2[i]):
-            return -1
-        else:
-            return 1
-    
-    if len(list1) == len(list2):
-        return True
-    elif len(list1) < len(list2):
-        return False
-    else:
-        return True
-    
+
 class PositionalEmbedding(nn.Module):
     def __init__(self, d_model, max_len=5000):
         super(PositionalEmbedding, self).__init__()
@@ -619,7 +581,7 @@ class PositionalEmbedding(nn.Module):
 class TokenEmbedding(nn.Module):
     def __init__(self, c_in, d_model):
         super(TokenEmbedding, self).__init__()
-        padding = 1 if compared_version(torch.__version__, '1.5.0') else 2
+        padding = 1 if torch.__version__ >= '1.5.0' else 2
         self.tokenConv = nn.Conv1d(in_channels=c_in, out_channels=d_model,
                                    kernel_size=3, padding=padding, padding_mode='circular', bias=False)
         for m in self.modules():
@@ -708,7 +670,19 @@ class DataEmbedding(nn.Module):
         x = self.value_embedding(x) + self.temporal_embedding(x_mark) + self.position_embedding(x)
         return self.dropout(x)
 
-## Here we have a difference!!! - This embedding class doesn't exist in Informer
+## Here we have a difference!!! - This type of embedding is unique to Fedformer
+class DataEmbedding_onlypos(nn.Module):
+    def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
+        super(DataEmbedding_onlypos, self).__init__()
+
+        self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
+        self.position_embedding = PositionalEmbedding(d_model=d_model)
+        self.dropout = nn.Dropout(p=dropout)
+
+    def forward(self, x, x_mark):
+        x = self.value_embedding(x) + self.position_embedding(x)
+        return self.dropout(x)
+    
 class DataEmbedding_wo_pos(nn.Module):
     def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
         super(DataEmbedding_wo_pos, self).__init__()
@@ -721,15 +695,236 @@ class DataEmbedding_wo_pos(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, x_mark):
+        # try:
         x = self.value_embedding(x) + self.temporal_embedding(x_mark)
+        # except:
+        #     a = 1
         return self.dropout(x)
+
+###########################################################################################################################
+# Tools for Attention Mechanisms#########################################################################################################
+
+def legendreDer(k, x):
+    def _legendre(k, x):
+        return (2*k+1) * eval_legendre(k, x)
+    out = 0
+    for i in np.arange(k-1,-1,-2):
+        out += _legendre(i, x)
+    return out
+
+
+def phi_(phi_c, x, lb = 0, ub = 1):
+    mask = np.logical_or(x<lb, x>ub) * 1.0
+    return np.polynomial.polynomial.Polynomial(phi_c)(x) * (1-mask)
+
+
+def get_phi_psi(k, base):
+    
+    x = Symbol('x')
+    phi_coeff = np.zeros((k,k))
+    phi_2x_coeff = np.zeros((k,k))
+    if base == 'legendre':
+        for ki in range(k):
+            coeff_ = Poly(legendre(ki, 2*x-1), x).all_coeffs()
+            phi_coeff[ki,:ki+1] = np.flip(np.sqrt(2*ki+1) * np.array(coeff_).astype(np.float64))
+            coeff_ = Poly(legendre(ki, 4*x-1), x).all_coeffs()
+            phi_2x_coeff[ki,:ki+1] = np.flip(np.sqrt(2) * np.sqrt(2*ki+1) * np.array(coeff_).astype(np.float64))
+        
+        psi1_coeff = np.zeros((k, k))
+        psi2_coeff = np.zeros((k, k))
+        for ki in range(k):
+            psi1_coeff[ki,:] = phi_2x_coeff[ki,:]
+            for i in range(k):
+                a = phi_2x_coeff[ki,:ki+1]
+                b = phi_coeff[i, :i+1]
+                prod_ = np.convolve(a, b)
+                prod_[np.abs(prod_)<1e-8] = 0
+                proj_ = (prod_ * 1/(np.arange(len(prod_))+1) * np.power(0.5, 1+np.arange(len(prod_)))).sum()
+                psi1_coeff[ki,:] -= proj_ * phi_coeff[i,:]
+                psi2_coeff[ki,:] -= proj_ * phi_coeff[i,:]
+            for j in range(ki):
+                a = phi_2x_coeff[ki,:ki+1]
+                b = psi1_coeff[j, :]
+                prod_ = np.convolve(a, b)
+                prod_[np.abs(prod_)<1e-8] = 0
+                proj_ = (prod_ * 1/(np.arange(len(prod_))+1) * np.power(0.5, 1+np.arange(len(prod_)))).sum()
+                psi1_coeff[ki,:] -= proj_ * psi1_coeff[j,:]
+                psi2_coeff[ki,:] -= proj_ * psi2_coeff[j,:]
+
+            a = psi1_coeff[ki,:]
+            prod_ = np.convolve(a, a)
+            prod_[np.abs(prod_)<1e-8] = 0
+            norm1 = (prod_ * 1/(np.arange(len(prod_))+1) * np.power(0.5, 1+np.arange(len(prod_)))).sum()
+
+            a = psi2_coeff[ki,:]
+            prod_ = np.convolve(a, a)
+            prod_[np.abs(prod_)<1e-8] = 0
+            norm2 = (prod_ * 1/(np.arange(len(prod_))+1) * (1-np.power(0.5, 1+np.arange(len(prod_))))).sum()
+            norm_ = np.sqrt(norm1 + norm2)
+            psi1_coeff[ki,:] /= norm_
+            psi2_coeff[ki,:] /= norm_
+            psi1_coeff[np.abs(psi1_coeff)<1e-8] = 0
+            psi2_coeff[np.abs(psi2_coeff)<1e-8] = 0
+
+        phi = [np.poly1d(np.flip(phi_coeff[i,:])) for i in range(k)]
+        psi1 = [np.poly1d(np.flip(psi1_coeff[i,:])) for i in range(k)]
+        psi2 = [np.poly1d(np.flip(psi2_coeff[i,:])) for i in range(k)]
+    
+    elif base == 'chebyshev':
+        for ki in range(k):
+            if ki == 0:
+                phi_coeff[ki,:ki+1] = np.sqrt(2/np.pi)
+                phi_2x_coeff[ki,:ki+1] = np.sqrt(2/np.pi) * np.sqrt(2)
+            else:
+                coeff_ = Poly(chebyshevt(ki, 2*x-1), x).all_coeffs()
+                phi_coeff[ki,:ki+1] = np.flip(2/np.sqrt(np.pi) * np.array(coeff_).astype(np.float64))
+                coeff_ = Poly(chebyshevt(ki, 4*x-1), x).all_coeffs()
+                phi_2x_coeff[ki,:ki+1] = np.flip(np.sqrt(2) * 2 / np.sqrt(np.pi) * np.array(coeff_).astype(np.float64))
+                
+        phi = [partial(phi_, phi_coeff[i,:]) for i in range(k)]
+        
+        x = Symbol('x')
+        kUse = 2*k
+        roots = Poly(chebyshevt(kUse, 2*x-1)).all_roots()
+        x_m = np.array([rt.evalf(20) for rt in roots]).astype(np.float64)
+        # x_m[x_m==0.5] = 0.5 + 1e-8 # add small noise to avoid the case of 0.5 belonging to both phi(2x) and phi(2x-1)
+        # not needed for our purpose here, we use even k always to avoid
+        wm = np.pi / kUse / 2
+        
+        psi1_coeff = np.zeros((k, k))
+        psi2_coeff = np.zeros((k, k))
+
+        psi1 = [[] for _ in range(k)]
+        psi2 = [[] for _ in range(k)]
+
+        for ki in range(k):
+            psi1_coeff[ki,:] = phi_2x_coeff[ki,:]
+            for i in range(k):
+                proj_ = (wm * phi[i](x_m) * np.sqrt(2)* phi[ki](2*x_m)).sum()
+                psi1_coeff[ki,:] -= proj_ * phi_coeff[i,:]
+                psi2_coeff[ki,:] -= proj_ * phi_coeff[i,:]
+
+            for j in range(ki):
+                proj_ = (wm * psi1[j](x_m) * np.sqrt(2) * phi[ki](2*x_m)).sum()        
+                psi1_coeff[ki,:] -= proj_ * psi1_coeff[j,:]
+                psi2_coeff[ki,:] -= proj_ * psi2_coeff[j,:]
+
+            psi1[ki] = partial(phi_, psi1_coeff[ki,:], lb = 0, ub = 0.5)
+            psi2[ki] = partial(phi_, psi2_coeff[ki,:], lb = 0.5, ub = 1)
+
+            norm1 = (wm * psi1[ki](x_m) * psi1[ki](x_m)).sum()
+            norm2 = (wm * psi2[ki](x_m) * psi2[ki](x_m)).sum()
+
+            norm_ = np.sqrt(norm1 + norm2)
+            psi1_coeff[ki,:] /= norm_
+            psi2_coeff[ki,:] /= norm_
+            psi1_coeff[np.abs(psi1_coeff)<1e-8] = 0
+            psi2_coeff[np.abs(psi2_coeff)<1e-8] = 0
+
+            psi1[ki] = partial(phi_, psi1_coeff[ki,:], lb = 0, ub = 0.5+1e-16)
+            psi2[ki] = partial(phi_, psi2_coeff[ki,:], lb = 0.5+1e-16, ub = 1)
+        
+    return phi, psi1, psi2
+
+
+def get_filter(base, k):
+    
+    def psi(psi1, psi2, i, inp):
+        mask = (inp<=0.5) * 1.0
+        return psi1[i](inp) * mask + psi2[i](inp) * (1-mask)
+    
+    if base not in ['legendre', 'chebyshev']:
+        raise Exception('Base not supported')
+    
+    x = Symbol('x')
+    H0 = np.zeros((k,k))
+    H1 = np.zeros((k,k))
+    G0 = np.zeros((k,k))
+    G1 = np.zeros((k,k))
+    PHI0 = np.zeros((k,k))
+    PHI1 = np.zeros((k,k))
+    phi, psi1, psi2 = get_phi_psi(k, base)
+    if base == 'legendre':
+        roots = Poly(legendre(k, 2*x-1)).all_roots()
+        x_m = np.array([rt.evalf(20) for rt in roots]).astype(np.float64)
+        wm = 1/k/legendreDer(k,2*x_m-1)/eval_legendre(k-1,2*x_m-1)
+        
+        for ki in range(k):
+            for kpi in range(k):
+                H0[ki, kpi] = 1/np.sqrt(2) * (wm * phi[ki](x_m/2) * phi[kpi](x_m)).sum()
+                G0[ki, kpi] = 1/np.sqrt(2) * (wm * psi(psi1, psi2, ki, x_m/2) * phi[kpi](x_m)).sum()
+                H1[ki, kpi] = 1/np.sqrt(2) * (wm * phi[ki]((x_m+1)/2) * phi[kpi](x_m)).sum()
+                G1[ki, kpi] = 1/np.sqrt(2) * (wm * psi(psi1, psi2, ki, (x_m+1)/2) * phi[kpi](x_m)).sum()
+                
+        PHI0 = np.eye(k)
+        PHI1 = np.eye(k)
+                
+    elif base == 'chebyshev':
+        x = Symbol('x')
+        kUse = 2*k
+        roots = Poly(chebyshevt(kUse, 2*x-1)).all_roots()
+        x_m = np.array([rt.evalf(20) for rt in roots]).astype(np.float64)
+        # x_m[x_m==0.5] = 0.5 + 1e-8 # add small noise to avoid the case of 0.5 belonging to both phi(2x) and phi(2x-1)
+        # not needed for our purpose here, we use even k always to avoid
+        wm = np.pi / kUse / 2
+
+        for ki in range(k):
+            for kpi in range(k):
+                H0[ki, kpi] = 1/np.sqrt(2) * (wm * phi[ki](x_m/2) * phi[kpi](x_m)).sum()
+                G0[ki, kpi] = 1/np.sqrt(2) * (wm * psi(psi1, psi2, ki, x_m/2) * phi[kpi](x_m)).sum()
+                H1[ki, kpi] = 1/np.sqrt(2) * (wm * phi[ki]((x_m+1)/2) * phi[kpi](x_m)).sum()
+                G1[ki, kpi] = 1/np.sqrt(2) * (wm * psi(psi1, psi2, ki, (x_m+1)/2) * phi[kpi](x_m)).sum()
+
+                PHI0[ki, kpi] = (wm * phi[ki](2*x_m) * phi[kpi](2*x_m)).sum() * 2
+                PHI1[ki, kpi] = (wm * phi[ki](2*x_m-1) * phi[kpi](2*x_m-1)).sum() * 2
+                
+        PHI0[np.abs(PHI0)<1e-8] = 0
+        PHI1[np.abs(PHI1)<1e-8] = 0
+
+    H0[np.abs(H0)<1e-8] = 0
+    H1[np.abs(H1)<1e-8] = 0
+    G0[np.abs(G0)<1e-8] = 0
+    G1[np.abs(G1)<1e-8] = 0
+        
+    return H0, H1, G0, G1, PHI0, PHI1
 
 ###########################################################################################################################
 # Attention Mechanisms ####################################################################################################
 
+##
+class FullAttention(nn.Module):
+    def __init__(self, mask_flag=True, factor=5, scale=None, attention_dropout=0.1, output_attention=False):
+        super(FullAttention, self).__init__()
+        self.scale = scale
+        self.mask_flag = mask_flag
+        self.output_attention = output_attention
+        self.dropout = nn.Dropout(attention_dropout)
+
+    def forward(self, queries, keys, values, attn_mask):
+        B, L, H, E = queries.shape
+        _, S, _, D = values.shape
+        scale = self.scale or 1. / sqrt(E)
+
+        scores = torch.einsum("blhe,bshe->bhls", queries, keys)
+
+        if self.mask_flag:
+            if attn_mask is None:
+                attn_mask = TriangularCausalMask(B, L, device=queries.device)
+
+            scores.masked_fill_(attn_mask.mask, -np.inf)
+
+        A = self.dropout(torch.softmax(scale * scores, dim=-1))
+        V = torch.einsum("bhls,bshd->blhd", A, values)
+
+        if self.output_attention:
+            return (V.contiguous(), A)
+        else:
+            return (V.contiguous(), None)
+
+
 class ProbAttention(nn.Module):
     '''
-    ProbSparse attention mechanism introduced in Informer. 
+    ProbSparse attention mechanism as introduced in Informer. 
     '''
     def __init__(self, mask_flag=True, factor=5, scale=None, attention_dropout=0.1, output_attention=False):
         super(ProbAttention, self).__init__()
@@ -818,8 +1013,8 @@ class ProbAttention(nn.Module):
         context, attn = self._update_context(context, values, scores_top, index, L_Q, attn_mask)
 
         return context.contiguous(), attn
-    
-# Alternative: vanilla attention mechanism    
+
+
 class AttentionLayer(nn.Module):
     '''
     Vanilla attention mechanism as implemented by Vaswani et al. (2017).
@@ -858,39 +1053,22 @@ class AttentionLayer(nn.Module):
 
         return self.out_projection(out), attn
 
-# Alternative: The Reformer attention mechanism    
-## Only used in Autoformer
-class ReformerLayer(nn.Module):
-    def __init__(self, attention, d_model, n_heads, d_keys=None,
-                 d_values=None, causal=False, bucket_size=4, n_hashes=4):
-        super().__init__()
-        self.bucket_size = bucket_size
-        self.attn = LSHSelfAttention(
-            dim=d_model,
-            heads=n_heads,
-            bucket_size=bucket_size,
-            n_hashes=n_hashes,
-            causal=causal
-        )
+###########################################################################################################################
+# Correlation Mechanisms ####################################################################################################
+### This part is mostly unique to FedFormer (except for Autocorrelation).
 
-    def fit_length(self, queries):
-        # inside reformer: assert N % (bucket_size * 2) == 0
-        B, N, C = queries.shape
-        if N % (self.bucket_size * 2) == 0:
-            return queries
-        else:
-            # fill the time series
-            fill_len = (self.bucket_size * 2) - (N % (self.bucket_size * 2))
-            return torch.cat([queries, torch.zeros([B, fill_len, C]).to(queries.device)], dim=1)
+## Unique to Fedformer
+def decor_time(func):
+    def func2(*args, **kw):
+        now = time.time()
+        y = func(*args, **kw)
+        t = time.time() - now
+        print('call <{}>, time={}'.format(func.__name__, t))
+        return y
+    return func2
 
-    def forward(self, queries, keys, values, attn_mask):
-        # in Reformer: defalut queries=keys
-        B, N, C = queries.shape
-        queries = self.attn(self.fit_length(queries))[:, :N, :]
-        return queries, None
-    
-# Auto Correlation#########################################################################################################
-### This one is specific to Autoformer
+###########################################################################################################################
+# Auto-Correlation ####################################################################################################
 class AutoCorrelation(nn.Module):
     """
     AutoCorrelation Mechanism with the following two phases:
@@ -898,14 +1076,18 @@ class AutoCorrelation(nn.Module):
     (2) time delay aggregation
     This block can replace the self-attention family mechanism seamlessly.
     """
-    def __init__(self, mask_flag=True, factor=1, scale=None, attention_dropout=0.1, output_attention=False):
+    def __init__(self, mask_flag=True, factor=1, scale=None, attention_dropout=0.1, output_attention=False, configs=None):
         super(AutoCorrelation, self).__init__()
+        print('Autocorrelation used !')
         self.factor = factor
         self.scale = scale
         self.mask_flag = mask_flag
         self.output_attention = output_attention
         self.dropout = nn.Dropout(attention_dropout)
+        self.agg = None
+        # self.use_wavelet = configs.wavelet
 
+    # @decor_time
     def time_delay_agg_training(self, values, corr):
         """
         SpeedUp version of Autocorrelation (a batch-normalization style design)
@@ -928,7 +1110,7 @@ class AutoCorrelation(nn.Module):
             pattern = torch.roll(tmp_values, -int(index[i]), -1)
             delays_agg = delays_agg + pattern * \
                          (tmp_corr[:, i].unsqueeze(1).unsqueeze(1).unsqueeze(1).repeat(1, head, channel, length))
-        return delays_agg
+        return delays_agg  # size=[B, H, d, S]
 
     def time_delay_agg_inference(self, values, corr):
         """
@@ -940,12 +1122,12 @@ class AutoCorrelation(nn.Module):
         channel = values.shape[2]
         length = values.shape[3]
         # index init
-        init_index = torch.arange(length).unsqueeze(0).unsqueeze(0).unsqueeze(0)\
-            .repeat(batch, head, channel, 1).to(values.device)
+        init_index = torch.arange(length).unsqueeze(0).unsqueeze(0).unsqueeze(0).repeat(batch, head, channel, 1).cuda()
         # find top k
         top_k = int(self.factor * math.log(length))
         mean_value = torch.mean(torch.mean(corr, dim=1), dim=1)
-        weights, delay = torch.topk(mean_value, top_k, dim=-1)
+        weights = torch.topk(mean_value, top_k, dim=-1)[0]
+        delay = torch.topk(mean_value, top_k, dim=-1)[1]
         # update corr
         tmp_corr = torch.softmax(weights, dim=-1)
         # aggregation
@@ -967,11 +1149,11 @@ class AutoCorrelation(nn.Module):
         channel = values.shape[2]
         length = values.shape[3]
         # index init
-        init_index = torch.arange(length).unsqueeze(0).unsqueeze(0).unsqueeze(0)\
-            .repeat(batch, head, channel, 1).to(values.device)
+        init_index = torch.arange(length).unsqueeze(0).unsqueeze(0).unsqueeze(0).repeat(batch, head, channel, 1).cuda()
         # find top k
         top_k = int(self.factor * math.log(length))
-        weights, delay = torch.topk(corr, top_k, dim=-1)
+        weights = torch.topk(corr, top_k, dim=-1)[0]
+        delay = torch.topk(corr, top_k, dim=-1)[1]
         # update corr
         tmp_corr = torch.softmax(weights, dim=-1)
         # aggregation
@@ -998,7 +1180,7 @@ class AutoCorrelation(nn.Module):
         q_fft = torch.fft.rfft(queries.permute(0, 2, 3, 1).contiguous(), dim=-1)
         k_fft = torch.fft.rfft(keys.permute(0, 2, 3, 1).contiguous(), dim=-1)
         res = q_fft * torch.conj(k_fft)
-        corr = torch.fft.irfft(res, n=L, dim=-1)
+        corr = torch.fft.irfft(res, dim=-1)
 
         # time delay agg
         if self.training:
@@ -1042,14 +1224,497 @@ class AutoCorrelationLayer(nn.Module):
             values,
             attn_mask
         )
-        out = out.view(B, L, -1)
 
+        out = out.view(B, L, -1)
         return self.out_projection(out), attn
+    
+###########################################################################################################################
+# Multi-Wavelet-Correlation ####################################################################################################
+
+class MultiWaveletTransform(nn.Module):
+    """
+    1D multiwavelet block.
+    """
+
+    def __init__(self, ich=1, k=8, alpha=16, c=128,
+                 nCZ=1, L=0, base='legendre', attention_dropout=0.1):
+        super(MultiWaveletTransform, self).__init__()
+        print('base', base)
+        self.k = k
+        self.c = c
+        self.L = L
+        self.nCZ = nCZ
+        self.Lk0 = nn.Linear(ich, c * k)
+        self.Lk1 = nn.Linear(c * k, ich)
+        self.ich = ich
+        self.MWT_CZ = nn.ModuleList(MWT_CZ1d(k, alpha, L, c, base) for i in range(nCZ))
+
+    def forward(self, queries, keys, values, attn_mask):
+        B, L, H, E = queries.shape
+        _, S, _, D = values.shape
+        if L > S:
+            zeros = torch.zeros_like(queries[:, :(L - S), :]).float()
+            values = torch.cat([values, zeros], dim=1)
+            keys = torch.cat([keys, zeros], dim=1)
+        else:
+            values = values[:, :L, :, :]
+            keys = keys[:, :L, :, :]
+        values = values.view(B, L, -1)
+
+        V = self.Lk0(values).view(B, L, self.c, -1)
+        for i in range(self.nCZ):
+            V = self.MWT_CZ[i](V)
+            if i < self.nCZ - 1:
+                V = F.relu(V)
+
+        V = self.Lk1(V.view(B, L, -1))
+        V = V.view(B, L, -1, D)
+        return (V.contiguous(), None)
+
+
+class MultiWaveletCross(nn.Module):
+    """
+    1D Multiwavelet Cross Attention layer.
+    """
+
+    def __init__(self, in_channels, out_channels, seq_len_q, seq_len_kv, modes, c=64,
+                 k=8, ich=512,
+                 L=0,
+                 base='legendre',
+                 mode_select_method='random',
+                 initializer=None, activation='tanh',
+                 **kwargs):
+        super(MultiWaveletCross, self).__init__()
+        print('base', base)
+
+        self.c = c
+        self.k = k
+        self.L = L
+        H0, H1, G0, G1, PHI0, PHI1 = get_filter(base, k)
+        H0r = H0 @ PHI0
+        G0r = G0 @ PHI0
+        H1r = H1 @ PHI1
+        G1r = G1 @ PHI1
+
+        H0r[np.abs(H0r) < 1e-8] = 0
+        H1r[np.abs(H1r) < 1e-8] = 0
+        G0r[np.abs(G0r) < 1e-8] = 0
+        G1r[np.abs(G1r) < 1e-8] = 0
+        self.max_item = 3
+
+        self.attn1 = FourierCrossAttentionW(in_channels=in_channels, out_channels=out_channels, seq_len_q=seq_len_q,
+                                            seq_len_kv=seq_len_kv, modes=modes, activation=activation,
+                                            mode_select_method=mode_select_method)
+        self.attn2 = FourierCrossAttentionW(in_channels=in_channels, out_channels=out_channels, seq_len_q=seq_len_q,
+                                            seq_len_kv=seq_len_kv, modes=modes, activation=activation,
+                                            mode_select_method=mode_select_method)
+        self.attn3 = FourierCrossAttentionW(in_channels=in_channels, out_channels=out_channels, seq_len_q=seq_len_q,
+                                            seq_len_kv=seq_len_kv, modes=modes, activation=activation,
+                                            mode_select_method=mode_select_method)
+        self.attn4 = FourierCrossAttentionW(in_channels=in_channels, out_channels=out_channels, seq_len_q=seq_len_q,
+                                            seq_len_kv=seq_len_kv, modes=modes, activation=activation,
+                                            mode_select_method=mode_select_method)
+        self.T0 = nn.Linear(k, k)
+        self.register_buffer('ec_s', torch.Tensor(
+            np.concatenate((H0.T, H1.T), axis=0)))
+        self.register_buffer('ec_d', torch.Tensor(
+            np.concatenate((G0.T, G1.T), axis=0)))
+
+        self.register_buffer('rc_e', torch.Tensor(
+            np.concatenate((H0r, G0r), axis=0)))
+        self.register_buffer('rc_o', torch.Tensor(
+            np.concatenate((H1r, G1r), axis=0)))
+
+        self.Lk = nn.Linear(ich, c * k)
+        self.Lq = nn.Linear(ich, c * k)
+        self.Lv = nn.Linear(ich, c * k)
+        self.out = nn.Linear(c * k, ich)
+        self.modes1 = modes
+
+    def forward(self, q, k, v, mask=None):
+        B, N, H, E = q.shape  # (B, N, H, E) torch.Size([3, 768, 8, 2])
+        _, S, _, _ = k.shape  # (B, S, H, E) torch.Size([3, 96, 8, 2])
+
+        q = q.view(q.shape[0], q.shape[1], -1)
+        k = k.view(k.shape[0], k.shape[1], -1)
+        v = v.view(v.shape[0], v.shape[1], -1)
+        q = self.Lq(q)
+        q = q.view(q.shape[0], q.shape[1], self.c, self.k)
+        k = self.Lk(k)
+        k = k.view(k.shape[0], k.shape[1], self.c, self.k)
+        v = self.Lv(v)
+        v = v.view(v.shape[0], v.shape[1], self.c, self.k)
+
+        if N > S:
+            zeros = torch.zeros_like(q[:, :(N - S), :]).float()
+            v = torch.cat([v, zeros], dim=1)
+            k = torch.cat([k, zeros], dim=1)
+        else:
+            v = v[:, :N, :, :]
+            k = k[:, :N, :, :]
+
+        ns = math.floor(np.log2(N))
+        nl = pow(2, math.ceil(np.log2(N)))
+        extra_q = q[:, 0:nl - N, :, :]
+        extra_k = k[:, 0:nl - N, :, :]
+        extra_v = v[:, 0:nl - N, :, :]
+        q = torch.cat([q, extra_q], 1)
+        k = torch.cat([k, extra_k], 1)
+        v = torch.cat([v, extra_v], 1)
+
+        Ud_q = torch.jit.annotate(List[Tuple[Tensor]], [])
+        Ud_k = torch.jit.annotate(List[Tuple[Tensor]], [])
+        Ud_v = torch.jit.annotate(List[Tuple[Tensor]], [])
+
+        Us_q = torch.jit.annotate(List[Tensor], [])
+        Us_k = torch.jit.annotate(List[Tensor], [])
+        Us_v = torch.jit.annotate(List[Tensor], [])
+
+        Ud = torch.jit.annotate(List[Tensor], [])
+        Us = torch.jit.annotate(List[Tensor], [])
+
+        # decompose
+        for i in range(ns - self.L):
+            # print('q shape',q.shape)
+            d, q = self.wavelet_transform(q)
+            Ud_q += [tuple([d, q])]
+            Us_q += [d]
+        for i in range(ns - self.L):
+            d, k = self.wavelet_transform(k)
+            Ud_k += [tuple([d, k])]
+            Us_k += [d]
+        for i in range(ns - self.L):
+            d, v = self.wavelet_transform(v)
+            Ud_v += [tuple([d, v])]
+            Us_v += [d]
+        for i in range(ns - self.L):
+            dk, sk = Ud_k[i], Us_k[i]
+            dq, sq = Ud_q[i], Us_q[i]
+            dv, sv = Ud_v[i], Us_v[i]
+            Ud += [self.attn1(dq[0], dk[0], dv[0], mask)[0] + self.attn2(dq[1], dk[1], dv[1], mask)[0]]
+            Us += [self.attn3(sq, sk, sv, mask)[0]]
+        v = self.attn4(q, k, v, mask)[0]
+
+        # reconstruct
+        for i in range(ns - 1 - self.L, -1, -1):
+            v = v + Us[i]
+            v = torch.cat((v, Ud[i]), -1)
+            v = self.evenOdd(v)
+        v = self.out(v[:, :N, :, :].contiguous().view(B, N, -1))
+        return (v.contiguous(), None)
+
+    def wavelet_transform(self, x):
+        xa = torch.cat([x[:, ::2, :, :],
+                        x[:, 1::2, :, :],
+                        ], -1)
+        d = torch.matmul(xa, self.ec_d)
+        s = torch.matmul(xa, self.ec_s)
+        return d, s
+
+    def evenOdd(self, x):
+        B, N, c, ich = x.shape  # (B, N, c, k)
+        assert ich == 2 * self.k
+        x_e = torch.matmul(x, self.rc_e)
+        x_o = torch.matmul(x, self.rc_o)
+
+        x = torch.zeros(B, N * 2, c, self.k,
+                        device=x.device)
+        x[..., ::2, :, :] = x_e
+        x[..., 1::2, :, :] = x_o
+        return x
+
+
+class FourierCrossAttentionW(nn.Module):
+    def __init__(self, in_channels, out_channels, seq_len_q, seq_len_kv, modes=16, activation='tanh',
+                 mode_select_method='random'):
+        super(FourierCrossAttentionW, self).__init__()
+        print('corss fourier correlation used!')
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.modes1 = modes
+        self.activation = activation
+
+    def forward(self, q, k, v, mask):
+        B, L, E, H = q.shape
+
+        xq = q.permute(0, 3, 2, 1)  # size = [B, H, E, L] torch.Size([3, 8, 64, 512])
+        xk = k.permute(0, 3, 2, 1)
+        xv = v.permute(0, 3, 2, 1)
+        self.index_q = list(range(0, min(int(L // 2), self.modes1)))
+        self.index_k_v = list(range(0, min(int(xv.shape[3] // 2), self.modes1)))
+
+        # Compute Fourier coefficients
+        xq_ft_ = torch.zeros(B, H, E, len(self.index_q), device=xq.device, dtype=torch.cfloat)
+        xq_ft = torch.fft.rfft(xq, dim=-1)
+        for i, j in enumerate(self.index_q):
+            xq_ft_[:, :, :, i] = xq_ft[:, :, :, j]
+
+        xk_ft_ = torch.zeros(B, H, E, len(self.index_k_v), device=xq.device, dtype=torch.cfloat)
+        xk_ft = torch.fft.rfft(xk, dim=-1)
+        for i, j in enumerate(self.index_k_v):
+            xk_ft_[:, :, :, i] = xk_ft[:, :, :, j]
+        xqk_ft = (torch.einsum("bhex,bhey->bhxy", xq_ft_, xk_ft_))
+        if self.activation == 'tanh':
+            xqk_ft = xqk_ft.tanh()
+        elif self.activation == 'softmax':
+            xqk_ft = torch.softmax(abs(xqk_ft), dim=-1)
+            xqk_ft = torch.complex(xqk_ft, torch.zeros_like(xqk_ft))
+        else:
+            raise Exception('{} actiation function is not implemented'.format(self.activation))
+        xqkv_ft = torch.einsum("bhxy,bhey->bhex", xqk_ft, xk_ft_)
+
+        xqkvw = xqkv_ft
+        out_ft = torch.zeros(B, H, E, L // 2 + 1, device=xq.device, dtype=torch.cfloat)
+        for i, j in enumerate(self.index_q):
+            out_ft[:, :, :, j] = xqkvw[:, :, :, i]
+
+        out = torch.fft.irfft(out_ft / self.in_channels / self.out_channels, n=xq.size(-1)).permute(0, 3, 2, 1)
+        # size = [B, L, H, E]
+        return (out, None)
+
+
+class sparseKernelFT1d(nn.Module):
+    def __init__(self,
+                 k, alpha, c=1,
+                 nl=1,
+                 initializer=None,
+                 **kwargs):
+        super(sparseKernelFT1d, self).__init__()
+
+        self.modes1 = alpha
+        self.scale = (1 / (c * k * c * k))
+        self.weights1 = nn.Parameter(self.scale * torch.rand(c * k, c * k, self.modes1, dtype=torch.cfloat))
+        self.weights1.requires_grad = True
+        self.k = k
+
+    def compl_mul1d(self, x, weights):
+        # (batch, in_channel, x ), (in_channel, out_channel, x) -> (batch, out_channel, x)
+        return torch.einsum("bix,iox->box", x, weights)
+
+    def forward(self, x):
+        B, N, c, k = x.shape  # (B, N, c, k)
+
+        x = x.view(B, N, -1)
+        x = x.permute(0, 2, 1)
+        x_fft = torch.fft.rfft(x)
+        # Multiply relevant Fourier modes
+        l = min(self.modes1, N // 2 + 1)
+        # l = N//2+1
+        out_ft = torch.zeros(B, c * k, N // 2 + 1, device=x.device, dtype=torch.cfloat)
+        out_ft[:, :, :l] = self.compl_mul1d(x_fft[:, :, :l], self.weights1[:, :, :l])
+        x = torch.fft.irfft(out_ft, n=N)
+        x = x.permute(0, 2, 1).view(B, N, c, k)
+        return x
+
+
+class MWT_CZ1d(nn.Module):
+    def __init__(self,
+                 k=3, alpha=64,
+                 L=0, c=1,
+                 base='legendre',
+                 initializer=None,
+                 **kwargs):
+        super(MWT_CZ1d, self).__init__()
+
+        self.k = k
+        self.L = L
+        H0, H1, G0, G1, PHI0, PHI1 = get_filter(base, k)
+        H0r = H0 @ PHI0
+        G0r = G0 @ PHI0
+        H1r = H1 @ PHI1
+        G1r = G1 @ PHI1
+
+        H0r[np.abs(H0r) < 1e-8] = 0
+        H1r[np.abs(H1r) < 1e-8] = 0
+        G0r[np.abs(G0r) < 1e-8] = 0
+        G1r[np.abs(G1r) < 1e-8] = 0
+        self.max_item = 3
+
+        self.A = sparseKernelFT1d(k, alpha, c)
+        self.B = sparseKernelFT1d(k, alpha, c)
+        self.C = sparseKernelFT1d(k, alpha, c)
+
+        self.T0 = nn.Linear(k, k)
+
+        self.register_buffer('ec_s', torch.Tensor(
+            np.concatenate((H0.T, H1.T), axis=0)))
+        self.register_buffer('ec_d', torch.Tensor(
+            np.concatenate((G0.T, G1.T), axis=0)))
+
+        self.register_buffer('rc_e', torch.Tensor(
+            np.concatenate((H0r, G0r), axis=0)))
+        self.register_buffer('rc_o', torch.Tensor(
+            np.concatenate((H1r, G1r), axis=0)))
+
+    def forward(self, x):
+        B, N, c, k = x.shape  # (B, N, k)
+        ns = math.floor(np.log2(N))
+        nl = pow(2, math.ceil(np.log2(N)))
+        extra_x = x[:, 0:nl - N, :, :]
+        x = torch.cat([x, extra_x], 1)
+        Ud = torch.jit.annotate(List[Tensor], [])
+        Us = torch.jit.annotate(List[Tensor], [])
+        #         decompose
+        for i in range(ns - self.L):
+            # print('x shape',x.shape)
+            d, x = self.wavelet_transform(x)
+            Ud += [self.A(d) + self.B(x)]
+            Us += [self.C(d)]
+        x = self.T0(x)  # coarsest scale transform
+
+        #        reconstruct
+        for i in range(ns - 1 - self.L, -1, -1):
+            x = x + Us[i]
+            x = torch.cat((x, Ud[i]), -1)
+            x = self.evenOdd(x)
+        x = x[:, :N, :, :]
+
+        return x
+
+    def wavelet_transform(self, x):
+        xa = torch.cat([x[:, ::2, :, :],
+                        x[:, 1::2, :, :],
+                        ], -1)
+        d = torch.matmul(xa, self.ec_d)
+        s = torch.matmul(xa, self.ec_s)
+        return d, s
+
+    def evenOdd(self, x):
+
+        B, N, c, ich = x.shape  # (B, N, c, k)
+        assert ich == 2 * self.k
+        x_e = torch.matmul(x, self.rc_e)
+        x_o = torch.matmul(x, self.rc_o)
+
+        x = torch.zeros(B, N * 2, c, self.k,
+                        device=x.device)
+        x[..., ::2, :, :] = x_e
+        x[..., 1::2, :, :] = x_o
+        return x
+    
+###########################################################################################################################
+#Fourier Correlation ####################################################################################################
+
+def get_frequency_modes(seq_len, modes=64, mode_select_method='random'):
+    """
+    get modes on frequency domain:
+    'random' means sampling randomly;
+    'else' means sampling the lowest modes;
+    """
+    modes = min(modes, seq_len//2)
+    if mode_select_method == 'random':
+        index = list(range(0, seq_len // 2))
+        np.random.shuffle(index)
+        index = index[:modes]
+    else:
+        index = list(range(0, modes))
+    index.sort()
+    return index
+
+
+########### Fourier layer #############
+class FourierBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, seq_len, modes=0, mode_select_method='random'):
+        super(FourierBlock, self).__init__()
+        print('fourier enhanced block used!')
+        """
+        1D Fourier block. It performs representation learning on frequency domain, 
+        it does FFT, linear transform, and Inverse FFT.    
+        """
+        # get modes on frequency domain
+        self.index = get_frequency_modes(seq_len, modes=modes, mode_select_method=mode_select_method)
+        print('modes={}, index={}'.format(modes, self.index))
+
+        self.scale = (1 / (in_channels * out_channels))
+        self.weights1 = nn.Parameter(
+            self.scale * torch.rand(8, in_channels // 8, out_channels // 8, len(self.index), dtype=torch.cfloat))
+
+    # Complex multiplication
+    def compl_mul1d(self, input, weights):
+        # (batch, in_channel, x ), (in_channel, out_channel, x) -> (batch, out_channel, x)
+        return torch.einsum("bhi,hio->bho", input, weights)
+
+    def forward(self, q, k, v, mask):
+        # size = [B, L, H, E]
+        B, L, H, E = q.shape
+        x = q.permute(0, 2, 3, 1)
+        # Compute Fourier coefficients
+        x_ft = torch.fft.rfft(x, dim=-1)
+        # Perform Fourier neural operations
+        out_ft = torch.zeros(B, H, E, L // 2 + 1, device=x.device, dtype=torch.cfloat)
+        for wi, i in enumerate(self.index):
+            out_ft[:, :, :, wi] = self.compl_mul1d(x_ft[:, :, :, i], self.weights1[:, :, :, wi])
+        # Return to time domain
+        x = torch.fft.irfft(out_ft, n=x.size(-1))
+        return (x, None)
+
+
+########### Fourier Cross Former ####################
+class FourierCrossAttention(nn.Module):
+    def __init__(self, in_channels, out_channels, seq_len_q, seq_len_kv, modes=64, mode_select_method='random',
+                 activation='tanh', policy=0):
+        super(FourierCrossAttention, self).__init__()
+        print(' fourier enhanced cross attention used!')
+        """
+        1D Fourier Cross Attention layer. It does FFT, linear transform, attention mechanism and Inverse FFT.    
+        """
+        self.activation = activation
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        # get modes for queries and keys (& values) on frequency domain
+        self.index_q = get_frequency_modes(seq_len_q, modes=modes, mode_select_method=mode_select_method)
+        self.index_kv = get_frequency_modes(seq_len_kv, modes=modes, mode_select_method=mode_select_method)
+
+        print('modes_q={}, index_q={}'.format(len(self.index_q), self.index_q))
+        print('modes_kv={}, index_kv={}'.format(len(self.index_kv), self.index_kv))
+
+        self.scale = (1 / (in_channels * out_channels))
+        self.weights1 = nn.Parameter(
+            self.scale * torch.rand(8, in_channels // 8, out_channels // 8, len(self.index_q), dtype=torch.cfloat))
+
+    # Complex multiplication
+    def compl_mul1d(self, input, weights):
+        # (batch, in_channel, x ), (in_channel, out_channel, x) -> (batch, out_channel, x)
+        return torch.einsum("bhi,hio->bho", input, weights)
+
+    def forward(self, q, k, v, mask):
+        # size = [B, L, H, E]
+        B, L, H, E = q.shape
+        xq = q.permute(0, 2, 3, 1)  # size = [B, H, E, L]
+        xk = k.permute(0, 2, 3, 1)
+        xv = v.permute(0, 2, 3, 1)
+
+        # Compute Fourier coefficients
+        xq_ft_ = torch.zeros(B, H, E, len(self.index_q), device=xq.device, dtype=torch.cfloat)
+        xq_ft = torch.fft.rfft(xq, dim=-1)
+        for i, j in enumerate(self.index_q):
+            xq_ft_[:, :, :, i] = xq_ft[:, :, :, j]
+        xk_ft_ = torch.zeros(B, H, E, len(self.index_kv), device=xq.device, dtype=torch.cfloat)
+        xk_ft = torch.fft.rfft(xk, dim=-1)
+        for i, j in enumerate(self.index_kv):
+            xk_ft_[:, :, :, i] = xk_ft[:, :, :, j]
+
+        # perform attention mechanism on frequency domain
+        xqk_ft = (torch.einsum("bhex,bhey->bhxy", xq_ft_, xk_ft_))
+        if self.activation == 'tanh':
+            xqk_ft = xqk_ft.tanh()
+        elif self.activation == 'softmax':
+            xqk_ft = torch.softmax(abs(xqk_ft), dim=-1)
+            xqk_ft = torch.complex(xqk_ft, torch.zeros_like(xqk_ft))
+        else:
+            raise Exception('{} actiation function is not implemented'.format(self.activation))
+        xqkv_ft = torch.einsum("bhxy,bhey->bhex", xqk_ft, xk_ft_)
+        xqkvw = torch.einsum("bhex,heox->bhox", xqkv_ft, self.weights1)
+        out_ft = torch.zeros(B, H, E, L // 2 + 1, device=xq.device, dtype=torch.cfloat)
+        for i, j in enumerate(self.index_q):
+            out_ft[:, :, :, j] = xqkvw[:, :, :, i]
+        # Return to time domain
+        out = torch.fft.irfft(out_ft / self.in_channels / self.out_channels, n=xq.size(-1))
+        return (out, None)
 
 ###########################################################################################################################
 # Encoder-Decoder #########################################################################################################
 
-##These layers are unique to Autoformer
 class my_Layernorm(nn.Module):
     """
     Special designed layernorm for the seasonal part
@@ -1075,8 +1740,8 @@ class moving_avg(nn.Module):
 
     def forward(self, x):
         # padding on the both ends of time series
-        front = x[:, 0:1, :].repeat(1, (self.kernel_size - 1) // 2, 1)
-        end = x[:, -1:, :].repeat(1, (self.kernel_size - 1) // 2, 1)
+        front = x[:, 0:1, :].repeat(1, self.kernel_size - 1-math.floor((self.kernel_size - 1) // 2), 1)
+        end = x[:, -1:, :].repeat(1, math.floor((self.kernel_size - 1) // 2), 1)
         x = torch.cat([front, x, end], dim=1)
         x = self.avg(x.permute(0, 2, 1))
         x = x.permute(0, 2, 1)
@@ -1096,6 +1761,35 @@ class series_decomp(nn.Module):
         res = x - moving_mean
         return res, moving_mean
 
+
+class series_decomp_multi(nn.Module):
+    """
+    Series decomposition block
+    """
+    def __init__(self, kernel_size):
+        super(series_decomp_multi, self).__init__()
+        self.moving_avg = [moving_avg(kernel, stride=1) for kernel in kernel_size]
+        self.layer = torch.nn.Linear(1, len(kernel_size))
+
+    def forward(self, x):
+        moving_mean=[]
+        for func in self.moving_avg:
+            moving_avg = func(x)
+            moving_mean.append(moving_avg.unsqueeze(-1))
+        moving_mean=torch.cat(moving_mean,dim=-1)
+        moving_mean = torch.sum(moving_mean*nn.Softmax(-1)(self.layer(x.unsqueeze(-1))),dim=-1)
+        res = x - moving_mean
+        return res, moving_mean 
+
+
+class FourierDecomp(nn.Module):
+    def __init__(self):
+        super(FourierDecomp, self).__init__()
+        pass
+
+    def forward(self, x):
+        x_ft = torch.fft.rfft(x, dim=-1)
+
 ###########################################################################################################################
 # Encoder#########################################################################################################
 
@@ -1109,8 +1803,14 @@ class EncoderLayer(nn.Module):
         self.attention = attention
         self.conv1 = nn.Conv1d(in_channels=d_model, out_channels=d_ff, kernel_size=1, bias=False)
         self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1, bias=False)
-        self.decomp1 = series_decomp(moving_avg)
-        self.decomp2 = series_decomp(moving_avg)
+
+        if isinstance(moving_avg, list):
+            self.decomp1 = series_decomp_multi(moving_avg)
+            self.decomp2 = series_decomp_multi(moving_avg)
+        else:
+            self.decomp1 = series_decomp(moving_avg)
+            self.decomp2 = series_decomp(moving_avg)
+
         self.dropout = nn.Dropout(dropout)
         self.activation = F.relu if activation == "relu" else F.gelu
 
@@ -1157,8 +1857,6 @@ class Encoder(nn.Module):
 
         return x, attns
 
-###########################################################################################################################
-#Decoder #########################################################################################################
 
 class DecoderLayer(nn.Module):
     """
@@ -1172,9 +1870,16 @@ class DecoderLayer(nn.Module):
         self.cross_attention = cross_attention
         self.conv1 = nn.Conv1d(in_channels=d_model, out_channels=d_ff, kernel_size=1, bias=False)
         self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1, bias=False)
-        self.decomp1 = series_decomp(moving_avg)
-        self.decomp2 = series_decomp(moving_avg)
-        self.decomp3 = series_decomp(moving_avg)
+
+        if isinstance(moving_avg, list):
+            self.decomp1 = series_decomp_multi(moving_avg)
+            self.decomp2 = series_decomp_multi(moving_avg)
+            self.decomp3 = series_decomp_multi(moving_avg)
+        else:
+            self.decomp1 = series_decomp(moving_avg)
+            self.decomp2 = series_decomp(moving_avg)
+            self.decomp3 = series_decomp(moving_avg)
+
         self.dropout = nn.Dropout(dropout)
         self.projection = nn.Conv1d(in_channels=d_model, out_channels=c_out, kernel_size=3, stride=1, padding=1,
                                     padding_mode='circular', bias=False)
@@ -1185,11 +1890,13 @@ class DecoderLayer(nn.Module):
             x, x, x,
             attn_mask=x_mask
         )[0])
+
         x, trend1 = self.decomp1(x)
         x = x + self.dropout(self.cross_attention(
             x, cross, cross,
             attn_mask=cross_mask
         )[0])
+
         x, trend2 = self.decomp2(x)
         y = x
         y = self.dropout(self.activation(self.conv1(y.transpose(-1, 1))))
@@ -1222,18 +1929,20 @@ class Decoder(nn.Module):
         if self.projection is not None:
             x = self.projection(x)
         return x, trend
-
+    
 ###########################################################################################################################
 ### ENTIRE MODEL FRAMEWORKS ###############################################################################################
-# Autoformer  #######################################################################################################    
+# Fedformer  #######################################################################################################    
 
-class Autoformer(nn.Module):
+class Fedformer(nn.Module):
     """
-    Autoformer is the first method to achieve the series-wise connection,
-    with inherent O(LlogL) complexity
+    FEDformer performs the attention mechanism on frequency domain and achieved O(N) complexity
     """
     def __init__(self, configs):
-        super(Autoformer, self).__init__()
+        super(Fedformer, self).__init__()
+        self.version = configs.version
+        self.mode_select = configs.mode_select
+        self.modes = configs.modes
         self.seq_len = configs.seq_len
         self.label_len = configs.label_len
         self.pred_len = configs.pred_len
@@ -1241,7 +1950,10 @@ class Autoformer(nn.Module):
 
         # Decomp
         kernel_size = configs.moving_avg
-        self.decomp = series_decomp(kernel_size)
+        if isinstance(kernel_size, list):
+            self.decomp = series_decomp_multi(kernel_size)
+        else:
+            self.decomp = series_decomp(kernel_size)
 
         # Embedding
         # The series-wise connection inherently contains the sequential information.
@@ -1251,14 +1963,46 @@ class Autoformer(nn.Module):
         self.dec_embedding = DataEmbedding_wo_pos(configs.dec_in, configs.d_model, configs.embed, configs.freq,
                                                   configs.dropout)
 
+        if configs.version == 'Wavelets':
+            encoder_self_att = MultiWaveletTransform(ich=configs.d_model, L=configs.L, base=configs.base)
+            decoder_self_att = MultiWaveletTransform(ich=configs.d_model, L=configs.L, base=configs.base)
+            decoder_cross_att = MultiWaveletCross(in_channels=configs.d_model,
+                                                  out_channels=configs.d_model,
+                                                  seq_len_q=self.seq_len // 2 + self.pred_len,
+                                                  seq_len_kv=self.seq_len,
+                                                  modes=configs.modes,
+                                                  ich=configs.d_model,
+                                                  base=configs.base,
+                                                  activation=configs.cross_activation)
+        else:
+            encoder_self_att = FourierBlock(in_channels=configs.d_model,
+                                            out_channels=configs.d_model,
+                                            seq_len=self.seq_len,
+                                            modes=configs.modes,
+                                            mode_select_method=configs.mode_select)
+            decoder_self_att = FourierBlock(in_channels=configs.d_model,
+                                            out_channels=configs.d_model,
+                                            seq_len=self.seq_len//2+self.pred_len,
+                                            modes=configs.modes,
+                                            mode_select_method=configs.mode_select)
+            decoder_cross_att = FourierCrossAttention(in_channels=configs.d_model,
+                                                      out_channels=configs.d_model,
+                                                      seq_len_q=self.seq_len//2+self.pred_len,
+                                                      seq_len_kv=self.seq_len,
+                                                      modes=configs.modes,
+                                                      mode_select_method=configs.mode_select)
         # Encoder
+        enc_modes = int(min(configs.modes, configs.seq_len//2))
+        dec_modes = int(min(configs.modes, (configs.seq_len//2+configs.pred_len)//2))
+        print('enc_modes: {}, dec_modes: {}'.format(enc_modes, dec_modes))
+
         self.encoder = Encoder(
             [
                 EncoderLayer(
                     AutoCorrelationLayer(
-                        AutoCorrelation(False, configs.factor, attention_dropout=configs.dropout,
-                                        output_attention=configs.output_attention),
+                        encoder_self_att,
                         configs.d_model, configs.n_heads),
+
                     configs.d_model,
                     configs.d_ff,
                     moving_avg=configs.moving_avg,
@@ -1273,12 +2017,10 @@ class Autoformer(nn.Module):
             [
                 DecoderLayer(
                     AutoCorrelationLayer(
-                        AutoCorrelation(True, configs.factor, attention_dropout=configs.dropout,
-                                        output_attention=False),
+                        decoder_self_att,
                         configs.d_model, configs.n_heads),
                     AutoCorrelationLayer(
-                        AutoCorrelation(False, configs.factor, attention_dropout=configs.dropout,
-                                        output_attention=False),
+                        decoder_cross_att,
                         configs.d_model, configs.n_heads),
                     configs.d_model,
                     configs.c_out,
@@ -1297,11 +2039,11 @@ class Autoformer(nn.Module):
                 enc_self_mask=None, dec_self_mask=None, dec_enc_mask=None):
         # decomp init
         mean = torch.mean(x_enc, dim=1).unsqueeze(1).repeat(1, self.pred_len, 1)
-        zeros = torch.zeros([x_dec.shape[0], self.pred_len, x_dec.shape[2]], device=x_enc.device)
+        zeros = torch.zeros([x_dec.shape[0], self.pred_len, x_dec.shape[2]]).to(device)  # cuda()
         seasonal_init, trend_init = self.decomp(x_enc)
         # decoder input
         trend_init = torch.cat([trend_init[:, -self.label_len:, :], mean], dim=1)
-        seasonal_init = torch.cat([seasonal_init[:, -self.label_len:, :], zeros], dim=1)
+        seasonal_init = F.pad(seasonal_init[:, -self.label_len:, :], (0, 0, 0, self.pred_len))
         # enc
         enc_out = self.enc_embedding(x_enc, x_mark_enc)
         enc_out, attns = self.encoder(enc_out, attn_mask=enc_self_mask)
@@ -1317,6 +2059,7 @@ class Autoformer(nn.Module):
         else:
             return dec_out[:, -self.pred_len:, :]  # [B, L, D]
 
+
 ###########################################################################################################################
 ### Training Helpers ######################################################################################################
 # Learning Rate Decay  ####################################################################################################
@@ -1330,6 +2073,10 @@ def adjust_learning_rate(optimizer, epoch, args):
             2: 5e-5, 4: 1e-5, 6: 5e-6, 8: 1e-6,
             10: 5e-7, 15: 1e-7, 20: 5e-8
         }
+    elif args.lradj =='type3':
+        lr_adjust = {epoch: args.learning_rate}
+    elif args.lradj == 'type4':
+        lr_adjust = {epoch: args.learning_rate * (0.9 ** ((epoch - 1) // 1))}
     if epoch in lr_adjust.keys():
         lr = lr_adjust[epoch]
         for param_group in optimizer.param_groups:
@@ -1337,7 +2084,7 @@ def adjust_learning_rate(optimizer, epoch, args):
         print('Updating learning rate to {}'.format(lr))
 
 ###########################################################################################################################
-# Early Stopping ##########################################################################################################
+# Early Stopping  ####################################################################################################
 
 class EarlyStopping:
     def __init__(self, patience=7, verbose=False, delta=0):
@@ -1373,19 +2120,19 @@ class EarlyStopping:
 ###########################################################################################################################
 # Running Experiments #####################################################################################################
 
-class Exp_Autoformer(Exp_Basic):
+class Exp_Fedformer(Exp_Basic):
     '''
-    Exp_Autoformer is the main class for the Autoformer architecture, which wraps up every component above. 
+    Exp_Fedformer is the main class for the Autoformer architecture, which wraps up every component above. 
     '''
     def __init__(self, args):
-        super(Exp_Autoformer, self).__init__(args)
+        super(Exp_Fedformer, self).__init__(args)
 
     def _build_model(self):
         model_dict = {
-            'Autoformer': Autoformer,
+            'Fedformer': Fedformer,
+            #'Autoformer': Autoformer,
             #'Transformer': Transformer,
-            #'Informer': Informer,
-            #'Reformer': Reformer,
+           # 'Informer': Informer,
         }
         model = model_dict[self.args.model](self.args).float()
 
@@ -1405,30 +2152,6 @@ class Exp_Autoformer(Exp_Basic):
         criterion = nn.MSELoss()
         return criterion
 
-    def _predict(self, batch_x, batch_y, batch_x_mark, batch_y_mark):
-        # decoder input
-        dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
-        dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
-        # encoder - decoder
-
-        def _run_model():
-            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-            if self.args.output_attention:
-                outputs = outputs[0]
-            return outputs
-
-        if self.args.use_amp:
-            with torch.cuda.amp.autocast():
-                outputs = _run_model()
-        else:
-            outputs = _run_model()
-
-        f_dim = -1 if self.args.features == 'MS' else 0
-        outputs = outputs[:, -self.args.pred_len:, f_dim:]
-        batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-
-        return outputs, batch_y
-
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
         self.model.eval()
@@ -1440,7 +2163,23 @@ class Exp_Autoformer(Exp_Basic):
                 batch_x_mark = batch_x_mark.float().to(self.device)
                 batch_y_mark = batch_y_mark.float().to(self.device)
 
-                outputs, batch_y = self._predict(batch_x, batch_y, batch_x_mark, batch_y_mark)
+                # decoder input
+                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+                # encoder - decoder
+                if self.args.use_amp:
+                    with torch.cuda.amp.autocast():
+                        if self.args.output_attention:
+                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                        else:
+                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                else:
+                    if self.args.output_attention:
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                    else:
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                f_dim = -1 if self.args.features == 'MS' else 0
+                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
 
                 pred = outputs.detach().cpu()
                 true = batch_y.detach().cpu()
@@ -1487,16 +2226,39 @@ class Exp_Autoformer(Exp_Basic):
                 batch_x_mark = batch_x_mark.float().to(self.device)
                 batch_y_mark = batch_y_mark.float().to(self.device)
 
-                outputs, batch_y = self._predict(batch_x, batch_y, batch_x_mark, batch_y_mark)
+                # decoder input
+                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
 
-                loss = criterion(outputs, batch_y)
-                train_loss.append(loss.item())
+                # encoder - decoder
+                if self.args.use_amp:
+                    with torch.cuda.amp.autocast():
+                        if self.args.output_attention:
+                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                        else:
+                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                        f_dim = -1 if self.args.features == 'MS' else 0
+                        batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                        loss = criterion(outputs, batch_y)
+                        train_loss.append(loss.item())
+                else:
+                    if self.args.output_attention:
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                    else:
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                    f_dim = -1 if self.args.features == 'MS' else 0
+                    batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+
+                    loss = criterion(outputs, batch_y)
+                    train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
-                    print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
+                    # print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
                     speed = (time.time() - time_now) / iter_count
                     left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
-                    print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
+                    # print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
                     iter_count = 0
                     time_now = time.time()
 
@@ -1525,7 +2287,7 @@ class Exp_Autoformer(Exp_Basic):
         best_model_path = path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))
 
-        return
+        return self.model
 
     def test(self, setting, test=0):
         test_data, test_loader = self._get_data(flag='test')
@@ -1548,8 +2310,26 @@ class Exp_Autoformer(Exp_Basic):
                 batch_x_mark = batch_x_mark.float().to(self.device)
                 batch_y_mark = batch_y_mark.float().to(self.device)
 
-                outputs, batch_y = self._predict(batch_x, batch_y, batch_x_mark, batch_y_mark)
+                # decoder input
+                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+                # encoder - decoder
+                if self.args.use_amp:
+                    with torch.cuda.amp.autocast():
+                        if self.args.output_attention:
+                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                        else:
+                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                else:
+                    if self.args.output_attention:
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
 
+                    else:
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+
+                f_dim = -1 if self.args.features == 'MS' else 0
+
+                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
                 outputs = outputs.detach().cpu().numpy()
                 batch_y = batch_y.detach().cpu().numpy()
 
@@ -1563,18 +2343,9 @@ class Exp_Autoformer(Exp_Basic):
                     gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
                     pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
                     #visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
-                # Added line - saves the first batch of the test set.
-                if i == 0:
-                    first_batch = {
-                    'batch_x' : batch_x ,
-                    'batch_y' : batch_y ,
-                    'batch_x_mark' : batch_x_mark ,
-                    'batch_y_mark' : batch_y_mark ,
-                    }
 
-
-        preds = np.concatenate(preds, axis=0)
-        trues = np.concatenate(trues, axis=0)
+        preds = np.array(preds)
+        trues = np.array(trues)
         print('test shape:', preds.shape, trues.shape)
         preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
         trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
@@ -1584,7 +2355,7 @@ class Exp_Autoformer(Exp_Basic):
         folder_path = './results/' + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
-        # Compute model evaluation metrics
+
         mae, mse, rmse, mape, mspe = metric(preds, trues)
         all_metrics = np.array([mae, mse, rmse, mape, mspe])
         print('mse:{}, mae:{}'.format(mse, mae))
@@ -1599,17 +2370,17 @@ class Exp_Autoformer(Exp_Basic):
         np.save(folder_path + 'pred.npy', preds)
         np.save(folder_path + 'true.npy', trues)
 
-        # Added returned variables - predictions and true values per window, as well as overall MSE and MAE scores and the first batch of the test set
+        # Added returned variables - predictions and true values per window, as well as overall MSE and MAE scores 
+        # and the first batch of the test set
         return preds , trues ,mae, mse , all_metrics, first_batch
 
     #Commented as this function is not used in our work
-    #def predict(self, setting, load=False):
+   # def predict(self, setting, load=False):
         #pred_data, pred_loader = self._get_data(flag='pred')
 
         #if load:
-           #path = os.path.join(self.args.checkpoints, setting)
+            #path = os.path.join(self.args.checkpoints, setting)
             #best_model_path = path + '/' + 'checkpoint.pth'
-            #logging.info(best_model_path)
             #self.model.load_state_dict(torch.load(best_model_path))
 
         #preds = []
@@ -1622,8 +2393,21 @@ class Exp_Autoformer(Exp_Basic):
                 #batch_x_mark = batch_x_mark.float().to(self.device)
                 #batch_y_mark = batch_y_mark.float().to(self.device)
 
-                #outputs, batch_y = self._predict(batch_x, batch_y, batch_x_mark, batch_y_mark)
-
+                # decoder input
+                #dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+                #dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+                # encoder - decoder
+                #if self.args.use_amp:
+                    #with torch.cuda.amp.autocast():
+                        #if self.args.output_attention:
+                            #outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                        #else:
+                            #outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                #else:
+                    #if self.args.output_attention:
+                        #outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+                    #else:
+                        #outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                 #pred = outputs.detach().cpu().numpy()  # .squeeze()
                 #preds.append(pred)
 
@@ -1641,64 +2425,75 @@ class Exp_Autoformer(Exp_Basic):
 
 ###########################################################################################################################
 # Our Simple User Interface ###############################################################################################
-class AutoformerTS():
+
+class FedformerTS():
     '''
-    Our custom wrapper class to provide an user-friendly interface for fitting and testing the of the Autoformer model. 
+    Our custom wrapper class to provide an user-friendly interface for fitting and testing the of the Fedformer model. 
     For simplicity of use, methods included align with naming used by Keras.  
     '''
 
-    def __init__(self, model='Autoformer'):
-        # Currently only Autoformer is supported
-        if model != 'Autoformer':
-            raise ValueError("Model not supported. Please use 'Autoformer'.")
+    def __init__(self, model='Fedformer'):
+        # Currently only Fedformer is supported
+        if model != 'Fedformer':
+            raise ValueError("Model not supported. Please use 'Fedformer'.")
         # Initialize dot dictionary
         self.args = dotdict()
         self.args.model = model
-        self.args.target = 'TARGET'
-        self.args.des = 'test'
-        self.args.dropout = 0.05
-        self.args.num_workers = 10
-        self.args.freq = 'h'
-        self.args.checkpoints = './checkpoints/'
-        self.args.bucket_size = 4
-        self.args.n_hashes = 4
-        self.args.is_trainging = True
+        # Supplementary config for FEDformer model
+        self.args.version = 'Fourier'
+        # Alternatively, use version =  'Wavelets' for the wavelet-based version of the model
+        self.args.mode_select = 'random'
+        # Alternitavely, use mode_select = 'low'
+        self.args.modes = 64
+        self.args.L = 3
+        self.args.base = 'legendre' #mwt base
+        self.args.cross_activation = 'tanh' #mwt cross atention activation function tanh or softmax
+        # Data
+        self.args.data = 'Synth1'
         self.args.root_path = './SYNTHDataset'
         self.args.data_path ='SYNTHh1.csv' 
-        self.args.model_id='Synth1_96_24'
-        self.args.model = 'Autoformer'
-        self.args.data = 'Synth1'
+        self.args.target = 'TARGET'
+        self.args.checkpoints = './checkpoints/'
+        # Forecasting task options:[M, S, MS]; M:multivariate predict multivariate, S:univariate predict univariate, 
+        # MS:multivariate predict univariate
+        # Currently only univariate-to-univariate supported
         self.args.features = 'S' #univariate
+        self.args.freq = 'h'
+        self.args.detail_freq = 'h' #like freq, but use in predict
+        # Lengths
         self.args.seq_len = 96
         self.args.label_len = 48
         self.args.pred_len = 24
-        self.args.e_layers = 2
-        self.args.d_layers = 1
-        self.args.n_heads = 8
-        self.args.factor = 1
+        # Model 
         self.args.enc_in = 1
         self.args.dec_in =1
         self.args.c_out = 1
         self.args.d_model = 512
-        self.args.des = 'Exp'
-        self.args.itr = 1
+        self.args.n_heads = 8
+        self.args.e_layers = 2
+        self.args.d_layers = 1
         self.args.d_ff = 2048
         self.args.moving_avg = 25
         self.args.factor = 1
         self.args.distil = True
-        self.args.output_attention = False
-        self.args.patience= 3
-        self.args.learning_rate = 0.0001
-        self.args.batch_size = 32 # batch size 32 as in the paper
+        self.args.dropout = 0.05
         self.args.embed = 'timeF'
         self.args.activation = 'gelu'
-        self.args.use_amp = False
+        self.args.output_attention = False
+        # Optimization
+        self.args.num_workers = 10
+        self.args.itr = 1
+        self.args.train_epochs = 10 # epoch size is 10 as in the paper 
+        self.args.batch_size = 32 # batch size 32 as in the paper
+        self.args.patience= 3
+        self.args.learning_rate = 0.0001
+        self.args.des = 'Exp'
+        self.args.des = 'test'
         self.args.loss = 'mse'
-        self.args.train_epochs = 10 # epoch size is 10 as in the paper   
-
+        self.args.lradj = 'type1'
+        self.args.use_amp = False
         # GPU 
         self.args.gpu = 0
-        self.args.lradj = 'type1'
         self.args.devices = '0,1,2,3'
         self.args.use_multi_gpu = False
         self.args.use_gpu = True if torch.cuda.is_available() else False
@@ -1712,7 +2507,7 @@ class AutoformerTS():
 
     def compile(self, learning_rate=1e-4, loss='mse', early_stopping_patience=3):
         '''
-        Compiles the Autoformer model for training.
+        Compiles the Fedformer model for training.
         Args:
             learning_rate (float): Learning rate to be used. Default: '1e-4'.
             loss (str): Loss function to be used. Default: 'mse'.
@@ -1726,7 +2521,7 @@ class AutoformerTS():
 
     def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=8, pred_len=24):
         '''
-        Fits the Autoformer model.
+        Fits the Fedformer model.
         Args:
             data (str): Name of the dataset used. For now, only 'SYNTHh1', 'SYNTHh2', 'DEWINDh_large' and 'DEWINDh_small' are supported. Default: 'SYNTHh1'. 
             data_root_path (str): Root folder for given dataset. Default: './SYNTHDataset'.
@@ -1756,7 +2551,7 @@ class AutoformerTS():
         print(f'{self.args}')
         print('='*150)
         # Set up model variable
-        Experiment_Model = Exp_Autoformer
+        Experiment_Model = Exp_Fedformer
         # Set up training settings
         self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_at{}_fc{}_eb{}_dt{}_mx{}_{}_{}'.format(self.args.model, self.args.data, self.args.features, 
                 self.args.seq_len, self.args.label_len, self.args.pred_len,
@@ -1781,3 +2576,4 @@ class AutoformerTS():
         # Clear memory
         torch.cuda.empty_cache()
         return self.preds
+
