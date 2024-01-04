@@ -3,8 +3,8 @@ import pandas as pd
 
 from torch.utils.data import Dataset, DataLoader
 
-from utils.tools import StandardScaler
-from utils.timefeatures import time_features
+from Pyraformer.utils.tools import StandardScaler
+from Pyraformer.utils.timefeatures import time_features
 import numpy as np
 import torch
 
@@ -263,6 +263,9 @@ class Dataset_Synthetic(Dataset):
         df_data = df_raw[cols_data]
 
         train_data = df_data[border1s[0]:border2s[0]]
+        print(f"Data Length: {len(df_data)}")
+        print(f"Train Length: {len(train_data)}")
+        print(f"Test Length:{len(df_data[border1s[2]:border2s[2]])}")
         self.scaler.fit(train_data.values)
         data = self.scaler.transform(df_data.values)
 

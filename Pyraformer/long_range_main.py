@@ -5,10 +5,10 @@ import time
 import torch
 import torch.optim as optim
 
-import pyraformer.Pyraformer_LR as Pyraformer
+import Pyraformer.pyraformer.Pyraformer_LR as Pyraformer
 from tqdm import tqdm
-from data_loader import *
-from utils.tools import TopkMSELoss, metric
+from Pyraformer.data_loader import *
+from Pyraformer.utils.tools import TopkMSELoss, metric
 
 
 def prepare_dataloader(args):
@@ -45,7 +45,7 @@ def prepare_dataloader(args):
         drop_last=drop_last)
 
     # prepare testing dataset and dataloader
-    shuffle_flag = False; drop_last = False; batch_size = args.batch_size
+    shuffle_flag = False; drop_last = True; batch_size = args.batch_size
     test_set = Data(
         root_path=args.root_path,
         data_path=args.data_path,
@@ -385,4 +385,3 @@ if __name__ == '__main__':
     np.save('results/'+opt.data+"metrics"+opt.data+str(opt.predict_step)+".npy",all_perf.min(axis=0))
     print('Average Metrics: {}'.format(mean_perf))
     print('Best Iteration: {}'.format(np.argmin(np.min(all_perf,axis=0))))
-
