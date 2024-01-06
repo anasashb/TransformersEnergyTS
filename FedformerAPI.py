@@ -2541,9 +2541,9 @@ class FedformerTS():
         if data not in possible_datasets:
             raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', 'DEWINDh_large', 'DEWINDh_small'.")
         # temporary line
-        possible_predlens = [12, 24, 168, 720]
+        possible_predlens = [24, 48, 96, 168, 336, 720]
         if pred_len not in possible_predlens:
-            raise ValueError('Prediction length outside current experiment scope. Please use either 24, 168, 720.')
+            raise ValueError('Prediction length outside current experiment scope. Please use either 24, 48, 96, 168, 336, 720.')
         self.args.data = data
         self.args.root_path = data_root_path
         self.args.data_path = f'{self.args.data}.csv'
