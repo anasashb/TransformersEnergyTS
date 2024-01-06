@@ -136,7 +136,7 @@ class PyraformerTS():
         self.data = data
         self.root_path = data_root_path
         self.data_path = f'{self.data}.csv'
-        self.epochs = epochs
+        self.epoch = epochs
         self.batch_size = batch_size
         self.predict_step = pred_len
 
@@ -173,8 +173,8 @@ class PyraformerTS():
         model_save_dir = 'models/LongRange/{}/{}/'.format(self.data, self.predict_step)
         """ prepare dataloader """
         _, _, test_dataloader, test_dataset = prepare_dataloader(self)
-
-        self.model.eval()
+        model = eval(self.model).Model(self)
+        model.eval()
         preds = []
         with torch.no_grad():
             for batch in tqdm(test_dataloader, mininterval=2, desc='  - (Validation) ', leave=False):
