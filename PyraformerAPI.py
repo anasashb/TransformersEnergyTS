@@ -172,12 +172,14 @@ class PyraformerTS():
         """ Epoch operation in evaluation phase for returning predictions only. """
         model_save_dir = 'models/LongRange/{}/{}/'.format(self.data, self.predict_step)
         """ prepare dataloader """
+        self.batch_size = 1
         _, _, test_dataloader, test_dataset = prepare_dataloader(self)
         model = eval(self.model).Model(self)
         model.eval()
+        print(test_dataset.seq_len,test_dataset.pred_len)
         preds = []
         with torch.no_grad():
-            for batch in tqdm(test_dataloader, mininterval=2, desc='  - (Validation) ', leave=False):
+            for batch in tqdm(test_dataloader, mininterval=1, desc='  - (Validation) ', leave=False):
                 """ prepare data """
                 batch_x, batch_y, batch_x_mark, batch_y_mark, mean, std = map(lambda x: x.float().to(self.device), batch)
                 dec_inp = torch.zeros_like(batch_y).float()
