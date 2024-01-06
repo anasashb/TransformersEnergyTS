@@ -21,7 +21,7 @@ def prepare_dataloader(args):
         'ETTm2':Dataset_ETT_minute,
         'elect':Dataset_Custom,
         'flow': Dataset_Custom,
-        'synthetic': Dataset_Synthetic,
+        'SYNTHh1': Dataset_Synthetic,
         'wind' : Dataset_Custom, # Added JTF
     }
     Data = data_dict[args.data]

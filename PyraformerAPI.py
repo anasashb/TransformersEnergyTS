@@ -26,9 +26,6 @@ class PyraformerTS():
         # running mode
         #parser.add_argument('-eval', action='store_true', default=False)
         self.eval = False
-
-
-
         # Path parameters
         #parser.add_argument('-data', type=str, default='ETTh1')
         #parser.add_argument('-root_path', type=str, default='./data/ETT/', help='root path of the data file')
@@ -110,9 +107,38 @@ class PyraformerTS():
         self.seq_num = parser.seq_num
         self.embed_type = parser.embed_type
 
-    def fit(self):
+    def compile(self, learning_rate=1e-4, loss='mse', early_stopping_patience=3):
+        '''
+        Compiles the Fedformer model for training.
+        Args:
+            learning_rate (float): Learning rate to be used. Default: '1e-4'.
+            loss (str): Loss function to be used. Default: 'mse'.
+            early_stopping_patience (int): Amount of epochs to beak training loop after no validation performance improvement. Default: 3.
+        '''
+        if loss != 'mse':
+            raise ValueError("Loss function not supported. Please use 'mse'.")
+        self.lr = learning_rate
+        self.loss = loss
+        self.patience = early_stopping_patience
+
+    def fit(self, data = "SYNTHh1", data_root_path = "./SYNTHDataset/", batch_size = 32 , epochs = 5 , pred_len = 24):
         """ Main function. """
         #print('[Info] parameters: {}'.format(self))
+
+                # temporary line
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'DEWINDh_large', 'DEWINDh_small']
+        if data not in possible_datasets:
+            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', 'DEWINDh_large', 'DEWINDh_small'.")
+        # temporary line
+        possible_predlens = [24, 48, 96, 168, 336, 720]
+        if pred_len not in possible_predlens:
+            raise ValueError('Prediction length outside current experiment scope. Please use either 24, 48, 96, 168, 336, 720.')
+        self.data = data
+        self.root_path = data_root_path
+        self.data_path = f'{self.data}.csv'
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.predict_step = pred_len
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -141,16 +167,12 @@ class PyraformerTS():
 
         print('Iteration best metrics: {}'.format(best_metrics))
         return best_metrics
+    
     def predict(self):
         """ Epoch operation in evaluation phase for returning predictions only. """
         model_save_dir = 'models/LongRange/{}/{}/'.format(self.data, self.predict_step)
         """ prepare dataloader """
         _, _, test_dataloader, test_dataset = prepare_dataloader(self)
-
-        """ load pretrained model """
-        checkpoint = torch.load(model_save_dir)["state_dict"]
-        self.model.load_state_dict(checkpoint)
-
 
         self.model.eval()
         preds = []
