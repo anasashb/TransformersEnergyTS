@@ -381,6 +381,254 @@ class Dataset_SYNTH_hour(Dataset):
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
     
+class Dataset_SYNTH_additive(Dataset):
+    '''
+    PyTorch dataloader class for an hourly dataset that is an adaptation of the original Dataset_MTS in Crossformer combined
+    with hourly dataset class from Informer.
+
+    New ARG:
+        data_split - a list of either [0.7, 0.1, 0.2] ratios or absolute numbers [12*30*24, 4*30*24, 4*30*24]. 
+        if not given, the function just defaults to the way Informer and Autoformer hourly data loaders make the split
+    '''
+    def __init__(self, root_path, data_path='SYNTH_additive.csv', flag='train', size=None,
+                 data_split = [0.7, 0.1, 0.2], scale=True, inverse=False, scale_statistic=None):
+
+        ##### B.A. Added an error check just as we have with the rest
+        ##### Renamed in_len and out_len to seq_len and pred_len to use same notation
+        if size == None:
+           self.seq_len = 24*4*4
+           self.pred_len = 24*4 
+        else:
+            self.seq_len = size[0]
+            self.pred_len = size[1]
+        # init
+        assert flag in ['train', 'test', 'val']
+        type_map = {'train':0, 'val':1, 'test':2}
+        self.set_type = type_map[flag]
+        
+        #### No self.features or self.target in Crossformer 
+        self.scale = scale
+        self.inverse = inverse ### B.A. Added this because it was not there
+        # No self.timeenc eather
+        self.root_path = root_path
+        self.data_path = data_path
+        self.data_split = data_split ## data_split a neat feature that could be incorporated with loaders for other classes
+        self.scale_statistic = scale_statistic
+        self.__read_data__()
+
+    def __read_data__(self):
+        df_raw = pd.read_csv(os.path.join(self.root_path,
+                                          self.data_path))
+        # If the data_split argument is given
+        if self.data_split:
+            # Check whether data split is given in sequence lengths 
+            if (self.data_split[0] > 1):
+                train_num = self.data_split[0]; val_num = self.data_split[1]; test_num = self.data_split[2];
+            # Or as ratios
+            else:
+                train_num = int(len(df_raw)*self.data_split[0]); 
+                test_num = int(len(df_raw)*self.data_split[2])
+                val_num = len(df_raw) - train_num - test_num; 
+            # Define borders
+            border1s = [0, train_num - self.seq_len, train_num + val_num - self.seq_len]
+            border2s = [train_num, train_num+val_num, train_num + val_num + test_num]
+        
+        # If data_split is not given: -- here we split just as the informer autoformer
+        else:
+            # Define borders just as Informer/Autoformer
+            border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
+            border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+
+        ### If you want to check the actual sequence lengths in the training, validation and test sets
+        ### Before the data is turned into windows
+        #train_len = border2s[0] - border1s[0]
+        #vali_len = border2s[1] - border1s[1]
+        #test_len = border2s[2] - border1s[2]
+        #print(f'Train len: {train_len}')
+        #print(f'Vali len: {vali_len}')
+        #print(f'Test len: {test_len}')
+        #print(f'Total length used: {train_len + vali_len + test_len}')
+
+        border1 = border1s[self.set_type]
+        border2 = border2s[self.set_type]
+        
+        # Univariate-to-univariate, Multivariate-to-univariate, Multivariate-to-Multivariate feature is absent
+        # By indexing at [1:], what this does is skip the date columna and include any amount of columns in data
+        # So this would just forecast 1-to-1 if there is only one column besides data, 2-to-2, 3-to-3 and so on
+        cols_data = df_raw.columns[1:]
+        df_data = df_raw[cols_data]
+
+
+        ######### Crossformer scaling has an additional functionality here where you can specify whatever mean and std you want to scale to
+        if self.scale:
+            if self.scale_statistic is None:
+                self.scaler = StandardScaler()
+                train_data = df_data[border1s[0]:border2s[0]]
+                self.scaler.fit(train_data.values)
+            else:
+                self.scaler = StandardScaler(mean = self.scale_statistic['mean'], std = self.scale_statistic['std'])
+            data = self.scaler.transform(df_data.values)
+        else:
+            data = df_data.values
+
+        ###### B.A. - Cross former does not include time feature embedding
+
+        self.data_x = data[border1:border2]
+        #### B.A. - Added self.inverse 
+        if self.inverse:
+            ## Then data y is defined from unscaled values
+            self.data_y = df_data[border1:border2]
+        else:
+            # Include scaled data as y
+            self.data_y = data[border1:border2]
+    
+    #### Since Crossformer does not have a label_len argument the code here is different 
+    #### B.A. I changed again in_len out_len to seq_len pred_len
+    def __getitem__(self, index):
+        s_begin = index # at 0 (assuming seq_len = 96, and pred_len = 24)
+        s_end = s_begin + self.seq_len # 95
+        r_begin = s_end # 96
+        r_end = r_begin + self.pred_len # 120
+
+        seq_x = self.data_x[s_begin:s_end] # [0:96] = 96
+        seq_y = self.data_y[r_begin:r_end] # [96:120] = 24
+        # There is no need for a if self.inverse condition here like in Informer/Autoformer because the seq_y does not 
+        # overlap with seq_x entries (in Informer and Autoformer, we took 48 scaled points from seq_x and 24 unscaled points from seq_y)
+        
+        # there is no seq_x_mark and seq_y_mark here either as there is no time encoding
+        return seq_x, seq_y
+    
+    ### Same as in the other frameworks just renamed in_len and out_len to seq_len and pred_len
+    def __len__(self):
+        return len(self.data_x) - self.seq_len - self.pred_len + 1
+
+    def inverse_transform(self, data):
+        return self.scaler.inverse_transform(data)
+    
+class Dataset_SYNTH_multiplicative(Dataset):
+    '''
+    PyTorch dataloader class for an hourly dataset that is an adaptation of the original Dataset_MTS in Crossformer combined
+    with hourly dataset class from Informer.
+
+    New ARG:
+        data_split - a list of either [0.7, 0.1, 0.2] ratios or absolute numbers [12*30*24, 4*30*24, 4*30*24]. 
+        if not given, the function just defaults to the way Informer and Autoformer hourly data loaders make the split
+    '''
+    def __init__(self, root_path, data_path='SYNTH_multiplicative.csv', flag='train', size=None,
+                 data_split = [0.7, 0.1, 0.2], scale=True, inverse=False, scale_statistic=None):
+
+        ##### B.A. Added an error check just as we have with the rest
+        ##### Renamed in_len and out_len to seq_len and pred_len to use same notation
+        if size == None:
+           self.seq_len = 24*4*4
+           self.pred_len = 24*4 
+        else:
+            self.seq_len = size[0]
+            self.pred_len = size[1]
+        # init
+        assert flag in ['train', 'test', 'val']
+        type_map = {'train':0, 'val':1, 'test':2}
+        self.set_type = type_map[flag]
+        
+        #### No self.features or self.target in Crossformer 
+        self.scale = scale
+        self.inverse = inverse ### B.A. Added this because it was not there
+        # No self.timeenc eather
+        self.root_path = root_path
+        self.data_path = data_path
+        self.data_split = data_split ## data_split a neat feature that could be incorporated with loaders for other classes
+        self.scale_statistic = scale_statistic
+        self.__read_data__()
+
+    def __read_data__(self):
+        df_raw = pd.read_csv(os.path.join(self.root_path,
+                                          self.data_path))
+        # If the data_split argument is given
+        if self.data_split:
+            # Check whether data split is given in sequence lengths 
+            if (self.data_split[0] > 1):
+                train_num = self.data_split[0]; val_num = self.data_split[1]; test_num = self.data_split[2];
+            # Or as ratios
+            else:
+                train_num = int(len(df_raw)*self.data_split[0]); 
+                test_num = int(len(df_raw)*self.data_split[2])
+                val_num = len(df_raw) - train_num - test_num; 
+            # Define borders
+            border1s = [0, train_num - self.seq_len, train_num + val_num - self.seq_len]
+            border2s = [train_num, train_num+val_num, train_num + val_num + test_num]
+        
+        # If data_split is not given: -- here we split just as the informer autoformer
+        else:
+            # Define borders just as Informer/Autoformer
+            border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
+            border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+
+        ### If you want to check the actual sequence lengths in the training, validation and test sets
+        ### Before the data is turned into windows
+        #train_len = border2s[0] - border1s[0]
+        #vali_len = border2s[1] - border1s[1]
+        #test_len = border2s[2] - border1s[2]
+        #print(f'Train len: {train_len}')
+        #print(f'Vali len: {vali_len}')
+        #print(f'Test len: {test_len}')
+        #print(f'Total length used: {train_len + vali_len + test_len}')
+
+        border1 = border1s[self.set_type]
+        border2 = border2s[self.set_type]
+        
+        # Univariate-to-univariate, Multivariate-to-univariate, Multivariate-to-Multivariate feature is absent
+        # By indexing at [1:], what this does is skip the date columna and include any amount of columns in data
+        # So this would just forecast 1-to-1 if there is only one column besides data, 2-to-2, 3-to-3 and so on
+        cols_data = df_raw.columns[1:]
+        df_data = df_raw[cols_data]
+
+
+        ######### Crossformer scaling has an additional functionality here where you can specify whatever mean and std you want to scale to
+        if self.scale:
+            if self.scale_statistic is None:
+                self.scaler = StandardScaler()
+                train_data = df_data[border1s[0]:border2s[0]]
+                self.scaler.fit(train_data.values)
+            else:
+                self.scaler = StandardScaler(mean = self.scale_statistic['mean'], std = self.scale_statistic['std'])
+            data = self.scaler.transform(df_data.values)
+        else:
+            data = df_data.values
+
+        ###### B.A. - Cross former does not include time feature embedding
+
+        self.data_x = data[border1:border2]
+        #### B.A. - Added self.inverse 
+        if self.inverse:
+            ## Then data y is defined from unscaled values
+            self.data_y = df_data[border1:border2]
+        else:
+            # Include scaled data as y
+            self.data_y = data[border1:border2]
+    
+    #### Since Crossformer does not have a label_len argument the code here is different 
+    #### B.A. I changed again in_len out_len to seq_len pred_len
+    def __getitem__(self, index):
+        s_begin = index # at 0 (assuming seq_len = 96, and pred_len = 24)
+        s_end = s_begin + self.seq_len # 95
+        r_begin = s_end # 96
+        r_end = r_begin + self.pred_len # 120
+
+        seq_x = self.data_x[s_begin:s_end] # [0:96] = 96
+        seq_y = self.data_y[r_begin:r_end] # [96:120] = 24
+        # There is no need for a if self.inverse condition here like in Informer/Autoformer because the seq_y does not 
+        # overlap with seq_x entries (in Informer and Autoformer, we took 48 scaled points from seq_x and 24 unscaled points from seq_y)
+        
+        # there is no seq_x_mark and seq_y_mark here either as there is no time encoding
+        return seq_x, seq_y
+    
+    ### Same as in the other frameworks just renamed in_len and out_len to seq_len and pred_len
+    def __len__(self):
+        return len(self.data_x) - self.seq_len - self.pred_len + 1
+
+    def inverse_transform(self, data):
+        return self.scaler.inverse_transform(data)
+    
 
 ###########################################################################################################################
 # Experiment class ########################################################################################################
@@ -887,6 +1135,8 @@ class Exp_crossformer(Exp_Basic):
         data_dict = {
             'SYNTHh1': Dataset_SYNTH_hour,
             'SYNTHh2': Dataset_SYNTH_hour,
+            'SYNTH_additive': Dataset_SYNTH_additive,
+            'SYNTH_multiplicative': Dataset_SYNTH_multiplicative,
             'DEWINDh_large': Dataset_WIND_hour,
             'DEWINDh_small': Dataset_WIND_hour            
         }
