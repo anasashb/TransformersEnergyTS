@@ -126,9 +126,9 @@ class PyraformerTS():
         #print('[Info] parameters: {}'.format(self))
 
                 # temporary line
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'DEWINDh_large', 'DEWINDh_small']
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_multiplicative', 'DEWINDh_large', 'DEWINDh_small']
         if data not in possible_datasets:
-            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', 'DEWINDh_large', 'DEWINDh_small'.")
+            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_multiplicative', 'DEWINDh_large', 'DEWINDh_small'.")
         # temporary line
         possible_predlens = [24, 48, 96, 168, 336, 720]
         if pred_len not in possible_predlens:
