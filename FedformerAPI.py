@@ -2715,7 +2715,7 @@ class FedformerTS():
             pred_len (int): Prediction window length. Default: 24. Recommended: 24, 168, 720.
         '''
         # temporary line
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'DEWINDh_large', 'DEWINDh_small']
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_multiplicative', 'DEWINDh_large', 'DEWINDh_small']
         if data not in possible_datasets:
             raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', 'DEWINDh_large', 'DEWINDh_small'.")
         # temporary line
