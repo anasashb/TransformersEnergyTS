@@ -22,6 +22,8 @@ def prepare_dataloader(args):
         'elect':Dataset_Custom,
         'flow': Dataset_Custom,
         'SYNTHh1': Dataset_Synthetic,
+        'SYNTH_additive' : Dataset_Synthetic_additive ,
+        'SYNTH_multiplicative' : Dataset_Synthetic_multiplicative ,
         'wind' : Dataset_Custom, # Added JTF
     }
     Data = data_dict[args.data]
@@ -86,6 +88,8 @@ def dataset_parameters(args, dataset):
         'elect':1,
         'flow': 1,
         'synthetic': 1,
+        'SYNTH_additive' : 1,
+        'SYNTH_multiplicative' : 1,
         'wind':1, # Added JTF
     }
     dataset2cov_size = {
@@ -96,6 +100,8 @@ def dataset_parameters(args, dataset):
         'elect':3,
         'flow': 3,
         'synthetic': 3,
+        'SYNTH_additive' : 3,
+        'SYNTH_multiplicative' : 3,
         'wind':3, # Added JTF
     }
     dataset2seq_num = {
@@ -106,6 +112,8 @@ def dataset_parameters(args, dataset):
         'elect':321,
         'flow': 1077,
         'synthetic': 60, # Changed JTF
+        'SYNTH_additive' : 60,
+        'SYNTH_multiplicative' : 60,
         'wind':1, # Added JTF
     }
     dataset2embed = {
@@ -116,6 +124,8 @@ def dataset_parameters(args, dataset):
         'elect':'CustomEmbedding',
         'flow': 'CustomEmbedding',
         'synthetic': 'CustomEmbedding',
+        'SYNTH_additive' : 'CustomEmbedding',
+        'SYNTH_multiplicative' : 'CustomEmbedding',
         'wind':'CustomEmbedding' # Added JTF
     }
 

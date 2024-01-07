@@ -30,9 +30,9 @@ class PyraformerTS():
         #parser.add_argument('-data', type=str, default='ETTh1')
         #parser.add_argument('-root_path', type=str, default='./data/ETT/', help='root path of the data file')
         #parser.add_argument('-data_path', type=str, default='ETTh1.csv', help='data file')
-        self.data = "wind"
-        self.root_path = "./WINDataset/"
-        self.data_path = "DEWindh_small.csv"
+        self.data = "SYNTHh1"
+        self.root_path = "./SYNTHDataset/"
+        self.data_path = "SYNTHh1.csv"
         # Dataloader parameters.
         #parser.add_argument('-input_size', type=int, default=168)
         #parser.add_argument('-predict_step', type=int, default=168)
