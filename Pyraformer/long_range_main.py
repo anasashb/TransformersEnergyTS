@@ -21,7 +21,7 @@ def prepare_dataloader(args):
         'ETTm2':Dataset_ETT_minute,
         'elect':Dataset_Custom,
         'flow': Dataset_Custom,
-        'synthetic': Dataset_Synthetic,
+        'SYNTHh1': Dataset_Synthetic,
         'wind' : Dataset_Custom, # Added JTF
     }
     Data = data_dict[args.data]
@@ -213,8 +213,8 @@ def eval_epoch(model, test_dataset, test_loader, opt, epoch,iter_index):
     preds = np.concatenate(preds, axis=0)
     trues = np.concatenate(trues, axis=0)
 
-    np.save('data/'+opt.data+'/predictions_'+opt.data+"_"+str(opt.predict_step)+"_"+str(iter_index)+".npy", preds)
-    np.save('data/'+opt.data+'/trues_'+opt.data+"_"+str(opt.predict_step)+"_"+str(iter_index)+".npy", trues)
+    #np.save('/predictions_'+opt.data+"_"+str(opt.predict_step)+"_"+str(iter_index)+".npy", preds)
+    #np.save('/trues_'+opt.data+"_"+str(opt.predict_step)+"_"+str(iter_index)+".npy", trues)
 
     print('test shape:{}'.format(preds.shape))
     mae, mse, rmse, mape, mspe = metric(preds, trues)
