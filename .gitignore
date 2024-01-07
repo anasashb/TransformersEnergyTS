@@ -1,2 +1,8 @@
 # Ignore any pycache
 __pycache__/
+
+# Ignore testnotebook
+anasb_tests.ipynb
+
+# Ignore some intermediate outputs
+some_outputs_to_ignore
