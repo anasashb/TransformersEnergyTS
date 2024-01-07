@@ -1477,6 +1477,8 @@ class CrossformerTS():
         self.data_parser = {
             'SYNTHh1':{'data':'SYNTHh1.csv', 'data_dim':1, 'split':[]},
             'SYNTHh2':{'data':'SYNTHh2.csv', 'data_dim':1, 'split':[12*30*24, 4*30*24, 4*30*24]},
+            'SYNTH_additive':{'data':'SYNTH_additive.csv', 'data_dim':1, 'split':[]},
+            'SYNTH_multiplicative':{'data':'SYNTH_multiplicative.csv', 'data_dim':1, 'split':[]},
             'DEWINDh_large':{'data':'DEWINDh_large.csv', 'data_dim':1, 'split':[0.7, 0.1, 0.2]},
             'DEWINDh_small':{'data':'DEWINDh_small.csv', 'data_dim':1, 'split':[12*30*24, 4*30*24, 4*30*24]},
         }
