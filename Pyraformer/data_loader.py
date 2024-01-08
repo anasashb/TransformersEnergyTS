@@ -229,7 +229,7 @@ class Dataset_Custom(Dataset):
 
 """Long range dataloader for synthetic dataset"""
 class Dataset_Synthetic(Dataset):
-    def __init__(self, root_path, flag='train', size=None, data_path='synthetic.csv', dataset='synthetic', inverse=False):
+    def __init__(self, root_path, flag='train', size=None, data_path='SYNTHh1.csv', dataset='SYNTHh1', inverse=False):
         # size [seq_len, label_len, pred_len]
         # info
         self.seq_len = size[0]
@@ -312,7 +312,7 @@ class Dataset_Synthetic(Dataset):
         return seq_x, seq_y, seq_x_mark, seq_y_mark, mean, std
     
 class Dataset_Synthetic_additive(Dataset):
-    def __init__(self, root_path, flag='train', size=None, data_path='SYNTH_additive.csv', dataset='SYNTH_additive', inverse=False):
+    def __init__(self, root_path, flag='train', size=None, data_path='SYNTH_multiplicative.csv', dataset='SYNTH_additive', inverse=False):
         # size [seq_len, label_len, pred_len]
         # info
         self.seq_len = size[0]

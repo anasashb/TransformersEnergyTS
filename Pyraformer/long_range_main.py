@@ -24,7 +24,7 @@ def prepare_dataloader(args):
         'SYNTHh1': Dataset_Synthetic,
         'SYNTH_additive' : Dataset_Synthetic_additive ,
         'SYNTH_multiplicative' : Dataset_Synthetic_multiplicative ,
-        'wind' : Dataset_Custom, # Added JTF
+        'DEWINDh_small' : Dataset_WIND_hour # Added JTF
     }
     Data = data_dict[args.data]
 
@@ -87,10 +87,10 @@ def dataset_parameters(args, dataset):
         'ETTm2':7,
         'elect':1,
         'flow': 1,
-        'synthetic': 1,
+        'SYNTHh1': 1,
         'SYNTH_additive' : 1,
         'SYNTH_multiplicative' : 1,
-        'wind':1, # Added JTF
+        'DEWINDh_small' : 1 # Added JTF
     }
     dataset2cov_size = {
         'ETTh1':4,
@@ -99,10 +99,10 @@ def dataset_parameters(args, dataset):
         'ETTm2':4,
         'elect':3,
         'flow': 3,
-        'synthetic': 3,
+        'SYNTHh1': 3,
         'SYNTH_additive' : 3,
         'SYNTH_multiplicative' : 3,
-        'wind':3, # Added JTF
+        'DEWINDh_small' : 3 # Added JTF
     }
     dataset2seq_num = {
         'ETTh1':1,
@@ -111,10 +111,10 @@ def dataset_parameters(args, dataset):
         'ETTm2':1,
         'elect':321,
         'flow': 1077,
-        'synthetic': 60, # Changed JTF
+        'SYNTHh1': 60, # Changed JTF
         'SYNTH_additive' : 60,
         'SYNTH_multiplicative' : 60,
-        'wind':1, # Added JTF
+        'DEWINDh_small' : 1 # Added JTF
     }
     dataset2embed = {
         'ETTh1':'DataEmbedding',
@@ -123,10 +123,10 @@ def dataset_parameters(args, dataset):
         'ETTm2':'DataEmbedding',
         'elect':'CustomEmbedding',
         'flow': 'CustomEmbedding',
-        'synthetic': 'CustomEmbedding',
+        'SYNTHh1': 'CustomEmbedding',
         'SYNTH_additive' : 'CustomEmbedding',
         'SYNTH_multiplicative' : 'CustomEmbedding',
-        'wind':'CustomEmbedding' # Added JTF
+        'DEWINDh_small' : 'CustomEmbedding' # Added JTF
     }
 
     args.enc_in = dataset2enc_in[dataset]
