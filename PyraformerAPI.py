@@ -171,28 +171,35 @@ class PyraformerTS():
     def predict(self):
         """ Epoch operation in evaluation phase for returning predictions only. """
         model_save_dir = 'models/LongRange/{}/{}/'.format(self.data, self.predict_step)
-        """ prepare dataloader """
+
+        """ Prepare dataloader """
         self.batch_size = 1
         _, _, test_dataloader, test_dataset = prepare_dataloader(self)
-        model = eval(self.model).Model(self)
+
+        # Set the device for computation
+        device = self.device
+        model = eval(self.model).Model(self).to(device)
         model.eval()
-        print(test_dataset.seq_len,test_dataset.pred_len)
+
+        print(test_dataset.seq_len, test_dataset.pred_len)
         preds = []
+
         with torch.no_grad():
             for batch in tqdm(test_dataloader, mininterval=1, desc='  - (Validation) ', leave=False):
-                """ prepare data """
-                batch_x, batch_y, batch_x_mark, batch_y_mark, mean, std = map(lambda x: x.float().to(self.device), batch)
-                dec_inp = torch.zeros_like(batch_y).float()
+                # Prepare data by moving it to the same device as the model
+                batch_x, batch_y, batch_x_mark, batch_y_mark, mean, std = map(lambda x: x.float().to(device), batch)
+                dec_inp = torch.zeros_like(batch_y).float().to(device)
 
-                # forward
+                # Forward pass
                 if self.decoder == 'FC':
                     # Add a predict token into the history sequence
-                    predict_token = torch.zeros(batch_x.size(0), 1, batch_x.size(-1), device=self.device)
+                    predict_token = torch.zeros(batch_x.size(0), 1, batch_x.size(-1), device=device)
                     batch_x = torch.cat([batch_x, predict_token], dim=1)
                     batch_x_mark = torch.cat([batch_x_mark, batch_y_mark[:, 0:1, :]], dim=1)
+
                 outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark, False)
 
-                # if inverse, the output is denormalized
+                # Denormalize the output if necessary
                 if self.inverse:
                     outputs = test_dataset.inverse_transform(outputs, mean, std)
 
