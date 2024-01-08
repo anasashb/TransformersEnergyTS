@@ -24,7 +24,7 @@ def prepare_dataloader(args):
         'SYNTHh1': Dataset_Synthetic,
         'SYNTH_additive' : Dataset_Synthetic_additive ,
         'SYNTH_multiplicative' : Dataset_Synthetic_multiplicative ,
-        'DEWINDh_small' : Dataset_WIND_hour # Added JTF
+        'DEWINDh_small' : Dataset_Custom # Added JTF
     }
     Data = data_dict[args.data]
 
