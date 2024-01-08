@@ -1354,6 +1354,8 @@ class Exp_crossformer(Exp_Basic):
         data_dict = {
             'SYNTHh1': Dataset_SYNTH_hour,
             'SYNTHh2': Dataset_SYNTH_hour,
+            'SYNTH_additive': Dataset_SYNTH_additive,
+            'SYNTH_multiplicative': Dataset_SYNTH_multiplicative,
             'DEWINDh_large': Dataset_WIND_hour,
             'DEWINDh_small': Dataset_WIND_hour            
         }
