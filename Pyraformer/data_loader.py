@@ -151,6 +151,79 @@ class Dataset_ETT_minute(Dataset):
     def inverse_transform(self, data, seq_y, mean, std):
         return self.scaler.inverse_transform(data), seq_y
 
+"""Long range dataloader for dataset elect and app flow"""
+class Dataset_WIND_hour(Dataset):
+    def __init__(self, root_path, flag='train', size=None, data_path='DEWINDh_small.csv', dataset='wind', 
+                inverse=False):
+        # size [seq_len, label_len, pred_len]
+        # info
+        self.seq_len = size[0]
+        self.pred_len = size[1]
+        # init
+        assert flag in ['train', 'test']
+        self.flag = flag
+
+        self.inverse = inverse
+        self.root_path = root_path
+        self.data_path = data_path
+        preprocess_path = os.path.join(self.root_path, self.data_path)
+        self.all_data, self.covariates, self.train_end = eval('preprocess_'+dataset)(preprocess_path)
+        self.all_data = torch.from_numpy(self.all_data).transpose(0, 1)
+        self.covariates = torch.from_numpy(self.covariates)
+        self.test_start = self.train_end - self.seq_len + 1
+        self.window_stride = 1 # changed from 24
+        self.seq_num = self.all_data.size(0)
+
+    def fit(self, data):
+        mean = data.mean()
+        std = data.std()
+        return mean, std
+
+    def inverse_transform(self, output, seq_y, mean, std):
+        output = output *  (mean.unsqueeze(1).unsqueeze(1) + 1)
+        seq_y = seq_y * (mean.unsqueeze(1).unsqueeze(1) + 1)
+        return output, seq_y
+
+    def __len__(self):
+        if self.flag == 'train':
+            self.window_per_seq = (self.train_end - self.seq_len - self.pred_len) // self.window_stride
+            return self.window_per_seq * self.seq_num
+        else:
+            self.window_per_seq = (self.all_data.size(1) - self.test_start - self.seq_len - self.pred_len) // self.window_stride
+            return self.window_per_seq * self.seq_num
+
+    def __getitem__(self, index):
+        seq_idx = index // self.window_per_seq
+        window_idx = index % self.window_per_seq
+
+        if self.flag == 'train':
+            s_begin = window_idx * self.window_stride
+        else:
+            s_begin = self.test_start + window_idx * self.window_stride
+
+        s_end = s_begin + self.seq_len
+        r_begin = s_end
+        r_end = r_begin + self.pred_len
+
+        seq_x = self.all_data[seq_idx, s_begin:s_end].clone()
+        seq_y = self.all_data[seq_idx, r_begin:r_end].clone()
+        mean, std = self.fit(seq_x)
+        if mean > 0:
+            seq_x = seq_x / (mean + 1)
+            seq_y = seq_y / (mean + 1)
+
+        if len(self.covariates.size()) == 2:
+            seq_x_mark = self.covariates[s_begin:s_end]
+            seq_x_mark[:, -1] = int(seq_idx)
+            seq_y_mark = self.covariates[r_begin:r_end]
+            seq_y_mark[:, -1] = int(seq_idx)
+        else:
+            seq_x_mark = self.covariates[s_begin:s_end, seq_idx]
+            seq_x_mark[:, -1] = int(seq_idx)
+            seq_y_mark = self.covariates[r_begin:r_end, seq_idx]
+            seq_y_mark[:, -1] = int(seq_idx)
+
+        return seq_x.unsqueeze(1), seq_y.unsqueeze(1), seq_x_mark, seq_y_mark, mean, std
 
 """Long range dataloader for dataset elect and app flow"""
 class Dataset_Custom(Dataset):

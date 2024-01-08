@@ -84,11 +84,12 @@ def save(data, v, save_dir):
 
 
 if __name__ == '__main__':
-#    datadir = 'WINDataset/DEWINDh_large.csv'
-#    all_data = load_data(datadir)
-#    covariates = get_covariates(len(all_data[0]), '1986-01-01 00:00:00')
-#    split_seq(all_data, covariates, 192, 24, 24, 'data/wind/large/')
-    datadir = os.path.join('..', 'WINDataset/DEWINDh_small.csv')
+    datadir = 'data/DEWINDh_large.csv'
+    all_data = load_data(datadir)
+    covariates = get_covariates(len(all_data[0]), '1986-01-01 00:00:00')
+    split_seq(all_data, covariates, 192, 24, 24, 'data/wind/large/')
+
+    datadir = 'data/DEWINDh_small.csv'
     all_data = load_data(datadir)
     covariates = get_covariates(len(all_data[0]), '2014-01-05 04:00:00')
     split_seq(all_data, covariates, 192, 24, 24, 'data/wind/small/')

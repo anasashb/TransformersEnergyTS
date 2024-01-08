@@ -187,7 +187,7 @@ class PyraformerTS():
                 # forward
                 if self.decoder == 'FC':
                     # Add a predict token into the history sequence
-                    predict_token = torch.zeros(batch_x.size(0), 1, batch_x.size(-1), device=batch_x.device)
+                    predict_token = torch.zeros(batch_x.size(0), 1, batch_x.size(-1), device=self.device)
                     batch_x = torch.cat([batch_x, predict_token], dim=1)
                     batch_x_mark = torch.cat([batch_x_mark, batch_y_mark[:, 0:1, :]], dim=1)
                 outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark, False)
