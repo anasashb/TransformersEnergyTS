@@ -1536,7 +1536,7 @@ class CrossformerTS():
         print('='*150)            
 
         Experiment_Model = Exp_crossformer
-        self.setting = 'Crossformer_{}_il{}_ol{}_sl{}_win{}_fa{}_dm{}_nh{}_el{}_itr{}'.format(self.args.data,
+        self.setting = 'Crossformer_{}_il{}_pl{}_sl{}_win{}_fa{}_dm{}_nh{}_el{}_itr{}'.format(self.args.data,
                     self.args.seq_len, self.args.pred_len, self.args.seg_len, self.args.win_size, self.args.factor,
                     self.args.d_model, self.args.n_heads, self.args.e_layers, 1)
         # Initialize model class
