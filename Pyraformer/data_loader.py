@@ -613,7 +613,7 @@ def preprocess_elect(csv_path):
 
     return all_data.astype(np.float32), covariates.astype(np.float32), train_end
 
-def preprocess_wind(csv_path):
+def preprocess_DEWINDh_small(csv_path):
     """preprocess the elect dataset for long range forecasting"""
     num_covariates = 4
     train_start = '2014-01-05 04:00:00'
