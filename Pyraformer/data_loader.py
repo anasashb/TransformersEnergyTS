@@ -617,8 +617,8 @@ def preprocess_DEWINDh_small(csv_path):
     """preprocess the elect dataset for long range forecasting"""
     num_covariates = 4
     train_start = '2014-01-05 04:00:00'
-    train_end = '2015-05-31 23:00:00'
-    test_start = '2015-06-01 00:00:00'
+    train_end = '2015-09-02 20:00:00'
+    test_start = '2015-09-03 22:00:00'
     test_end = '2015-12-31 23:00:00'
 
     data_frame = pd.read_csv(csv_path, sep=",", index_col=0, parse_dates=True, decimal='.')

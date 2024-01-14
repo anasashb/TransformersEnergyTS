@@ -85,7 +85,7 @@ class PyraformerTS():
         #parser.add_argument('-CSCM', type=str, default='Bottleneck_Construct')
         #parser.add_argument('-truncate', action='store_true', default=False) # Whether to remove coarse-scale nodes from the attention structure
         #parser.add_argument('-use_tvm', action='store_true', default=False) # Whether to use TVM.
-        self.window_size = [4,4,4]
+        self.window_size = [12,7,2]
         self.inner_size = 3
         self.CSCM = "Bottleneck_Construct"
         self.truncate = False
