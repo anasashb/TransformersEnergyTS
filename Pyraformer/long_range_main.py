@@ -24,12 +24,12 @@ def prepare_dataloader(args):
         'SYNTHh1': Dataset_Synthetic,
         'SYNTH_additive' : Dataset_Synthetic_additive ,
         'SYNTH_multiplicative' : Dataset_Synthetic_multiplicative ,
-        'DEWINDh_small' : Dataset_Custom # Added JTF
+        'DEWINDh_small' : Dataset_WIND_hour # Added JTF
     }
     Data = data_dict[args.data]
 
     # prepare training dataset and dataloader
-    shuffle_flag = True; drop_last = True; batch_size = args.batch_size
+    shuffle_flag = False; drop_last = True; batch_size = args.batch_size
     train_set = Data(
         root_path=args.root_path,
         data_path=args.data_path,
@@ -167,6 +167,7 @@ def train_epoch(model, train_dataset, training_loader, optimizer, opt, epoch):
             batch_x_mark = torch.cat([batch_x_mark, batch_y_mark[:, 0:1, :]], dim=1)
             outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark, False)
 
+
         # determine the loss function
         if opt.hard_sample_mining and not (opt.pretrain and epoch < 1):
             topk = sample_mining_scheduler(epoch, batch_x.size(0))
@@ -176,6 +177,7 @@ def train_epoch(model, train_dataset, training_loader, optimizer, opt, epoch):
         # if inverse, both the output and the ground truth are denormalized.
         if opt.inverse:
             outputs, batch_y = train_dataset.inverse_transform(outputs, batch_y, mean, std)
+            print(batch_y[0])
         # compute loss
         losses = criterion(outputs, batch_y)
         loss = losses.mean()

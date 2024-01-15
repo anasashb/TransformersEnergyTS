@@ -244,7 +244,7 @@ class Dataset_Custom(Dataset):
         self.all_data, self.covariates, self.train_end = eval('preprocess_'+dataset)(preprocess_path)
         self.all_data = torch.from_numpy(self.all_data).transpose(0, 1)
         self.covariates = torch.from_numpy(self.covariates)
-        self.test_start = self.train_end - self.seq_len + 1
+        self.test_start = self.train_end + 1#self.train_end - self.seq_len + 1
         self.window_stride = 1 # changed from 24
         self.seq_num = self.all_data.size(0)
 
@@ -327,7 +327,7 @@ class Dataset_Synthetic(Dataset):
         self.scaler = StandardScaler()
         df_raw = pd.read_csv(os.path.join(self.root_path,self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
+        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24-self.seq_len + 9]
         border2s = [12*30*24+4*30*24,0, 12*30*24+8*30*24]
         border1 = border1s[self.flag]
         border2 = border2s[self.flag]
@@ -619,7 +619,7 @@ def preprocess_DEWINDh_small(csv_path):
     train_start = '2014-01-05 04:00:00'
     train_end = '2015-09-02 20:00:00'
     test_start = '2015-09-03 22:00:00'
-    test_end = '2015-12-31 23:00:00'
+    test_end = '2015-12-31 13:00:00'
 
     data_frame = pd.read_csv(csv_path, sep=",", index_col=0, parse_dates=True, decimal='.')
     data_frame = data_frame.resample('1H',label = 'left',closed = 'right').sum()[train_start:test_end]

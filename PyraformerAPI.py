@@ -39,7 +39,7 @@ class PyraformerTS():
         #parser.add_argument('-inverse', action='store_true', help='denormalize output data', default=False)
         self.input_size = 168
         self.predict_step = 168
-        self.inverse = False
+        self.inverse = True
         # Architecture selection.
         #parser.add_argument('-model', type=str, default='Pyraformer')
         #parser.add_argument('-decoder', type=str, default='FC') # selection: [FC, attention]
@@ -183,6 +183,7 @@ class PyraformerTS():
 
         print(test_dataset.seq_len, test_dataset.pred_len)
         preds = []
+        trues = []
 
         with torch.no_grad():
             for batch in tqdm(test_dataloader, mininterval=1, desc='  - (Validation) ', leave=False):
@@ -204,6 +205,9 @@ class PyraformerTS():
                     outputs = test_dataset.inverse_transform(outputs, mean, std)
 
                 preds.append(outputs.detach().cpu().numpy())
+                trues.append(batch_y.detach().cpu().numpy())
+
 
         preds = np.concatenate(preds, axis=0)
-        return preds
+        trues = np.concatenate(trues,axis = 0)
+        return preds, trues
