@@ -39,7 +39,7 @@ class PyraformerTS():
         #parser.add_argument('-inverse', action='store_true', help='denormalize output data', default=False)
         self.input_size = 168
         self.predict_step = 168
-        self.inverse = True
+        self.inverse = False
         # Architecture selection.
         #parser.add_argument('-model', type=str, default='Pyraformer')
         #parser.add_argument('-decoder', type=str, default='FC') # selection: [FC, attention]

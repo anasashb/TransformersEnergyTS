@@ -163,16 +163,21 @@ class Dataset_WIND_hour(Dataset):
         assert flag in ['train', 'test']
         self.flag = flag
 
+        self.scaler = StandardScaler()
         self.inverse = inverse
         self.root_path = root_path
         self.data_path = data_path
         preprocess_path = os.path.join(self.root_path, self.data_path)
         self.all_data, self.covariates, self.train_end = eval('preprocess_'+dataset)(preprocess_path)
+        self.scaler.fit(self.all_data[0:self.train_end])
+        self.all_data = self.scaler.transform(self.all_data)
         self.all_data = torch.from_numpy(self.all_data).transpose(0, 1)
+        #print(self.all_data.shape)
         self.covariates = torch.from_numpy(self.covariates)
         self.test_start = self.train_end - self.seq_len + 1
         self.window_stride = 1 # changed from 24
         self.seq_num = self.all_data.size(0)
+        
 
     def fit(self, data):
         mean = data.mean()
@@ -410,7 +415,7 @@ class Dataset_Synthetic_additive(Dataset):
         self.scaler = StandardScaler()
         df_raw = pd.read_csv(os.path.join(self.root_path,self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
+        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24-self.seq_len + 9]
         border2s = [12*30*24+4*30*24,0, 12*30*24+8*30*24]
         border1 = border1s[self.flag]
         border2 = border2s[self.flag]
@@ -493,7 +498,7 @@ class Dataset_Synthetic_multiplicative(Dataset):
         self.scaler = StandardScaler()
         df_raw = pd.read_csv(os.path.join(self.root_path,self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
+        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24-self.seq_len + 9]
         border2s = [12*30*24+4*30*24,0, 12*30*24+8*30*24]
         border1 = border1s[self.flag]
         border2 = border2s[self.flag]
