@@ -42,16 +42,29 @@ class SynthesisTS:
         if reverse_trend == True:
             # Define refersal intervals as quarter 24 hours * 30 days * 3 months
             reverse_interval = 24*30*3
+
+        
             
         # Handle trend if given
         if trend == 'Additive':
             # Use input or default
             trend_slope = trend_slope if trend_slope else 0.01
+            accumulated = 0
+            increment = 0.005
+            from_increase_path = True
             for i in range(0,len(time_points)):
                 if reverse_trend and i % reverse_interval == 0 and i != 0:
                     # Just reverse direction if trend additive
                     trend_slope = -trend_slope
-                y[i] += trend_slope * i
+                    if not from_increase_path:
+                        trend_slope += increment
+                        from_increase_path = True
+                    else:
+                        from_increase_path = False
+                    # Reset some part of cumulation for smoothness
+                    accumulated *= 0.5
+                accumulated += trend_slope
+                y[i] += accumulated
 
                 print(f"Additive:{y[0],y[1],y[2]}")
         
