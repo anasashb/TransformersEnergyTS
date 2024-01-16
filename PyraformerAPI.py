@@ -145,7 +145,12 @@ class PyraformerTS():
         else:
             self.device = torch.device('cpu')
         """ prepare model """
-        self.model = eval(self.model).Model(self)
+        
+        if type(self.model) == str:
+            self.model = eval(self.model).Model(self)
+        else:
+            self.model = "Pyraformer"
+            self.model = eval(self.model).Model(self)
 
         self.model.to(self.device)
 
@@ -208,6 +213,6 @@ class PyraformerTS():
                 trues.append(batch_y.detach().cpu().numpy())
 
 
-        preds = np.concatenate(preds, axis=0)
-        trues = np.concatenate(trues,axis = 0)
-        return preds, trues
+        self.preds = np.concatenate(preds, axis=0)
+        self.trues = np.concatenate(trues,axis = 0)
+        return self.preds, self.trues
