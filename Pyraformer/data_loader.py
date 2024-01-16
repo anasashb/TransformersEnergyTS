@@ -163,21 +163,17 @@ class Dataset_WIND_hour(Dataset):
         assert flag in ['train', 'test']
         self.flag = flag
 
-        self.scaler = StandardScaler()
         self.inverse = inverse
         self.root_path = root_path
         self.data_path = data_path
         preprocess_path = os.path.join(self.root_path, self.data_path)
         self.all_data, self.covariates, self.train_end = eval('preprocess_'+dataset)(preprocess_path)
-        self.scaler.fit(self.all_data[0:self.train_end])
-        self.all_data = self.scaler.transform(self.all_data)
         self.all_data = torch.from_numpy(self.all_data).transpose(0, 1)
-        #print(self.all_data.shape)
         self.covariates = torch.from_numpy(self.covariates)
         self.test_start = self.train_end - self.seq_len + 1
         self.window_stride = 1 # changed from 24
         self.seq_num = self.all_data.size(0)
-        
+
 
     def fit(self, data):
         mean = data.mean()
@@ -213,9 +209,9 @@ class Dataset_WIND_hour(Dataset):
         seq_x = self.all_data[seq_idx, s_begin:s_end].clone()
         seq_y = self.all_data[seq_idx, r_begin:r_end].clone()
         mean, std = self.fit(seq_x)
-        if mean > 0:
-            seq_x = seq_x / (mean + 1)
-            seq_y = seq_y / (mean + 1)
+        #if mean > 0:
+        #    seq_x = seq_x / (mean + 1)
+        #    seq_y = seq_y / (mean + 1)
 
         if len(self.covariates.size()) == 2:
             seq_x_mark = self.covariates[s_begin:s_end]
