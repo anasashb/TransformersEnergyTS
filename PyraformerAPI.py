@@ -145,12 +145,12 @@ class PyraformerTS():
         else:
             self.device = torch.device('cpu')
         """ prepare model """
-        model = eval(self.model).Model(self)
+        self.model = eval(self.model).Model(self)
 
-        model.to(self.device)
+        self.model.to(self.device)
 
         """ number of parameters """
-        num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        num_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         print('[Info] Number of parameters: {}'.format(num_params))
 
         """ train or evaluate the model """
@@ -158,12 +158,12 @@ class PyraformerTS():
         os.makedirs(model_save_dir, exist_ok=True)
         model_save_dir += 'best_iter.pth'
         if self.eval:
-            best_metrics = evaluate(model, self, model_save_dir,1)
+            best_metrics = evaluate(self.model, self, model_save_dir,1)
         else:
             """ optimizer and scheduler """
-            optimizer = optim.Adam(filter(lambda x: x.requires_grad, model.parameters()), self.lr)
+            optimizer = optim.Adam(filter(lambda x: x.requires_grad, self.model.parameters()), self.lr)
             scheduler = optim.lr_scheduler.StepLR(optimizer, 1, gamma=self.lr_step)
-            best_metrics = train(model, optimizer, scheduler, self, model_save_dir,1)
+            best_metrics = train(self.model, optimizer, scheduler, self, model_save_dir,1)
 
         print('Iteration best metrics: {}'.format(best_metrics))
         return best_metrics
@@ -178,8 +178,8 @@ class PyraformerTS():
 
         # Set the device for computation
         device = self.device
-        model = eval(self.model).Model(self).to(device)
-        model.eval()
+        #model = eval(self.model).Model(self).to(device)
+        self.model.eval()
 
         print(test_dataset.seq_len, test_dataset.pred_len)
         preds = []
@@ -198,7 +198,7 @@ class PyraformerTS():
                     batch_x = torch.cat([batch_x, predict_token], dim=1)
                     batch_x_mark = torch.cat([batch_x_mark, batch_y_mark[:, 0:1, :]], dim=1)
 
-                outputs = model(batch_x, batch_x_mark, dec_inp, batch_y_mark, False)
+                outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark, False)
 
                 # Denormalize the output if necessary
                 if self.inverse:
