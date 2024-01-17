@@ -24,6 +24,8 @@ def prepare_dataloader(args):
         'SYNTHh1': Dataset_Synthetic,
         'SYNTH_additive' : Dataset_Synthetic_additive ,
         'SYNTH_multiplicative' : Dataset_Synthetic_multiplicative ,
+        'SYNTH_additive_reversals' : Dataset_Synthetic_additive_reversals,
+        'SYNTH_multiplicative_reversals' : Dataset_Synthetic_multiplicative_reversals,
         'DEWINDh_small' : Dataset_WIND_hour # Added JTF
     }
     Data = data_dict[args.data]
@@ -90,6 +92,8 @@ def dataset_parameters(args, dataset):
         'SYNTHh1': 1,
         'SYNTH_additive' : 1,
         'SYNTH_multiplicative' : 1,
+        'SYNTH_additive_reversals' : 1,
+        'SYNTH_multiplicative_reversals' : 1,
         'DEWINDh_small' : 1 # Added JTF
     }
     dataset2cov_size = {
@@ -102,6 +106,8 @@ def dataset_parameters(args, dataset):
         'SYNTHh1': 3,
         'SYNTH_additive' : 3,
         'SYNTH_multiplicative' : 3,
+        'SYNTH_multiplicative_reversals' : 3,
+        'SYNTH_additive_reversals' : 3,
         'DEWINDh_small' : 3 # Added JTF
     }
     dataset2seq_num = {
@@ -114,6 +120,8 @@ def dataset_parameters(args, dataset):
         'SYNTHh1': 60, # Changed JTF
         'SYNTH_additive' : 60,
         'SYNTH_multiplicative' : 60,
+        'SYNTH_multiplcative_reversals' : 60,
+        'SYNTH_additive_reversals' : 60,
         'DEWINDh_small' : 1 # Added JTF
     }
     dataset2embed = {
@@ -126,7 +134,10 @@ def dataset_parameters(args, dataset):
         'SYNTHh1': 'CustomEmbedding',
         'SYNTH_additive' : 'CustomEmbedding',
         'SYNTH_multiplicative' : 'CustomEmbedding',
-        'DEWINDh_small' : 'CustomEmbedding' # Added JTF
+        'DEWINDh_small' : 'CustomEmbedding' ,# Added JTF
+        'SYNTH_additive_reversals' : 'CustomEmbedding',
+        'SYNTH_multiplicative_reversals' : 'CustomEmbedding',
+        
     }
 
     args.enc_in = dataset2enc_in[dataset]

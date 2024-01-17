@@ -163,21 +163,17 @@ class Dataset_WIND_hour(Dataset):
         assert flag in ['train', 'test']
         self.flag = flag
 
-        self.scaler = StandardScaler()
         self.inverse = inverse
         self.root_path = root_path
         self.data_path = data_path
         preprocess_path = os.path.join(self.root_path, self.data_path)
         self.all_data, self.covariates, self.train_end = eval('preprocess_'+dataset)(preprocess_path)
-        self.scaler.fit(self.all_data[0:self.train_end])
-        self.all_data = self.scaler.transform(self.all_data)
         self.all_data = torch.from_numpy(self.all_data).transpose(0, 1)
-        #print(self.all_data.shape)
         self.covariates = torch.from_numpy(self.covariates)
         self.test_start = self.train_end - self.seq_len + 1
         self.window_stride = 1 # changed from 24
         self.seq_num = self.all_data.size(0)
-        
+
 
     def fit(self, data):
         mean = data.mean()
@@ -213,9 +209,9 @@ class Dataset_WIND_hour(Dataset):
         seq_x = self.all_data[seq_idx, s_begin:s_end].clone()
         seq_y = self.all_data[seq_idx, r_begin:r_end].clone()
         mean, std = self.fit(seq_x)
-        if mean > 0:
-            seq_x = seq_x / (mean + 1)
-            seq_y = seq_y / (mean + 1)
+        #if mean > 0:
+        #    seq_x = seq_x / (mean + 1)
+        #    seq_y = seq_y / (mean + 1)
 
         if len(self.covariates.size()) == 2:
             seq_x_mark = self.covariates[s_begin:s_end]
@@ -472,6 +468,89 @@ class Dataset_Synthetic_additive(Dataset):
 
         return seq_x, seq_y, seq_x_mark, seq_y_mark, mean, std
     
+class Dataset_Synthetic_multiplicative_reversals(Dataset):
+    def __init__(self, root_path, flag='train', size=None, data_path='SYNTH_multiplicative_reversals.csv', dataset='SYNTH_multiplicative_reversals', inverse=False):
+        # size [seq_len, label_len, pred_len]
+        # info
+        self.seq_len = size[0]
+        self.pred_len = size[1]
+        # init
+        assert flag in ['train', 'test']
+        type_map = {'train':0, 'val':1, 'test':2}
+        self.flag = type_map[flag]
+        self.inverse = inverse
+
+        self.root_path = root_path
+        self.data_path = data_path
+        preprocess_path = os.path.join(self.root_path, self.data_path)
+        self.__read_data__()
+
+        self.window_stride = 1 # changed from 24
+        #window_per_seq = (self.all_data.shape[1] - self.seq_len - self.pred_len) / self.window_stride
+        #self.train_end = self.seq_len + self.pred_len + int(0.9 * window_per_seq) * self.window_stride
+        #self.test_start = self.train_end - self.seq_len + 1
+
+    def __read_data__(self):
+        self.scaler = StandardScaler()
+        df_raw = pd.read_csv(os.path.join(self.root_path,self.data_path))
+
+        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24-self.seq_len + 9]
+        border2s = [12*30*24+4*30*24,0, 12*30*24+8*30*24]
+        border1 = border1s[self.flag]
+        border2 = border2s[self.flag]
+
+        cols_data = df_raw.columns[1:]
+        df_data = df_raw[cols_data]
+
+        train_data = df_data[border1s[0]:border2s[0]]
+        print(f"Data Length: {len(df_data)}")
+        print(f"Train Length: {len(train_data)}")
+        print(f"Test Length:{len(df_data[border1s[2]:border2s[2]])}")
+        self.scaler.fit(train_data.values)
+        data = self.scaler.transform(df_data.values)
+
+        df_stamp = df_raw[['date']][border1:border2]
+        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        data_stamp = time_features(df_stamp, timeenc=1, freq='h')
+
+        self.data_x = data[border1:border2]
+        if self.inverse:
+            self.data_y = df_data.values[border1:border2]
+        else:
+            self.data_y = data[border1:border2]
+        self.data_stamp = data_stamp
+
+    def fit(self, data):
+        mean = data.mean()
+        std = data.std()
+        return mean, std
+
+    def inverse_transform(self, output, seq_y, mean, std):
+        output = output *  (mean.unsqueeze(1).unsqueeze(1) + 1)
+        seq_y = seq_y * (mean.unsqueeze(1).unsqueeze(1) + 1)
+        return output, seq_y
+
+    def __len__(self):
+        return len(self.data_x) - self.seq_len- self.pred_len + 1
+    
+    def __getitem__(self, index):
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        r_begin = s_end
+        r_end = r_begin + self.pred_len
+
+        seq_x = self.data_x[s_begin:s_end]
+        seq_y = self.data_y[r_begin:r_end]
+        seq_x_mark = self.data_stamp[s_begin:s_end]
+        seq_y_mark = self.data_stamp[r_begin:r_end]
+
+        mean, std = self.fit(seq_x)
+        if mean > 0:
+            seq_x = seq_x / (mean + 1)
+            seq_y = seq_y / (mean + 1)
+
+        return seq_x, seq_y, seq_x_mark, seq_y_mark, mean, std
+
 class Dataset_Synthetic_multiplicative(Dataset):
     def __init__(self, root_path, flag='train', size=None, data_path='SYNTH_multiplicative.csv', dataset='SYNTH_multiplicative', inverse=False):
         # size [seq_len, label_len, pred_len]
@@ -555,6 +634,171 @@ class Dataset_Synthetic_multiplicative(Dataset):
 
         return seq_x, seq_y, seq_x_mark, seq_y_mark, mean, std
 
+class Dataset_Synthetic_additive_reversals(Dataset):
+    def __init__(self, root_path, flag='train', size=None, data_path='SYNTH_additive_reversals.csv', dataset='SYNTH_additive_reversals', inverse=False):
+        # size [seq_len, label_len, pred_len]
+        # info
+        self.seq_len = size[0]
+        self.pred_len = size[1]
+        # init
+        assert flag in ['train', 'test']
+        type_map = {'train':0, 'val':1, 'test':2}
+        self.flag = type_map[flag]
+        self.inverse = inverse
+
+        self.root_path = root_path
+        self.data_path = data_path
+        preprocess_path = os.path.join(self.root_path, self.data_path)
+        self.__read_data__()
+
+        self.window_stride = 1 # changed from 24
+        #window_per_seq = (self.all_data.shape[1] - self.seq_len - self.pred_len) / self.window_stride
+        #self.train_end = self.seq_len + self.pred_len + int(0.9 * window_per_seq) * self.window_stride
+        #self.test_start = self.train_end - self.seq_len + 1
+
+    def __read_data__(self):
+        self.scaler = StandardScaler()
+        df_raw = pd.read_csv(os.path.join(self.root_path,self.data_path))
+
+        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24-self.seq_len + 9]
+        border2s = [12*30*24+4*30*24,0, 12*30*24+8*30*24]
+        border1 = border1s[self.flag]
+        border2 = border2s[self.flag]
+
+        cols_data = df_raw.columns[1:]
+        df_data = df_raw[cols_data]
+
+        train_data = df_data[border1s[0]:border2s[0]]
+        print(f"Data Length: {len(df_data)}")
+        print(f"Train Length: {len(train_data)}")
+        print(f"Test Length:{len(df_data[border1s[2]:border2s[2]])}")
+        self.scaler.fit(train_data.values)
+        data = self.scaler.transform(df_data.values)
+
+        df_stamp = df_raw[['date']][border1:border2]
+        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        data_stamp = time_features(df_stamp, timeenc=1, freq='h')
+
+        self.data_x = data[border1:border2]
+        if self.inverse:
+            self.data_y = df_data.values[border1:border2]
+        else:
+            self.data_y = data[border1:border2]
+        self.data_stamp = data_stamp
+
+    def fit(self, data):
+        mean = data.mean()
+        std = data.std()
+        return mean, std
+
+    def inverse_transform(self, output, seq_y, mean, std):
+        output = output *  (mean.unsqueeze(1).unsqueeze(1) + 1)
+        seq_y = seq_y * (mean.unsqueeze(1).unsqueeze(1) + 1)
+        return output, seq_y
+
+    def __len__(self):
+        return len(self.data_x) - self.seq_len- self.pred_len + 1
+    
+    def __getitem__(self, index):
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        r_begin = s_end
+        r_end = r_begin + self.pred_len
+
+        seq_x = self.data_x[s_begin:s_end]
+        seq_y = self.data_y[r_begin:r_end]
+        seq_x_mark = self.data_stamp[s_begin:s_end]
+        seq_y_mark = self.data_stamp[r_begin:r_end]
+
+        mean, std = self.fit(seq_x)
+        if mean > 0:
+            seq_x = seq_x / (mean + 1)
+            seq_y = seq_y / (mean + 1)
+
+        return seq_x, seq_y, seq_x_mark, seq_y_mark, mean, std
+    
+    class Dataset_Synthetic_additive(Dataset):
+        def __init__(self, root_path, flag='train', size=None, data_path='SYNTH_additive.csv', dataset='SYNTH_additive', inverse=False):
+            # size [seq_len, label_len, pred_len]
+            # info
+            self.seq_len = size[0]
+            self.pred_len = size[1]
+            # init
+            assert flag in ['train', 'test']
+            type_map = {'train':0, 'val':1, 'test':2}
+            self.flag = type_map[flag]
+            self.inverse = inverse
+
+            self.root_path = root_path
+            self.data_path = data_path
+            preprocess_path = os.path.join(self.root_path, self.data_path)
+            self.__read_data__()
+
+            self.window_stride = 1 # changed from 24
+            #window_per_seq = (self.all_data.shape[1] - self.seq_len - self.pred_len) / self.window_stride
+            #self.train_end = self.seq_len + self.pred_len + int(0.9 * window_per_seq) * self.window_stride
+            #self.test_start = self.train_end - self.seq_len + 1
+
+        def __read_data__(self):
+            self.scaler = StandardScaler()
+            df_raw = pd.read_csv(os.path.join(self.root_path,self.data_path))
+
+            border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24-self.seq_len + 9]
+            border2s = [12*30*24+4*30*24,0, 12*30*24+8*30*24]
+            border1 = border1s[self.flag]
+            border2 = border2s[self.flag]
+
+            cols_data = df_raw.columns[1:]
+            df_data = df_raw[cols_data]
+
+            train_data = df_data[border1s[0]:border2s[0]]
+            print(f"Data Length: {len(df_data)}")
+            print(f"Train Length: {len(train_data)}")
+            print(f"Test Length:{len(df_data[border1s[2]:border2s[2]])}")
+            self.scaler.fit(train_data.values)
+            data = self.scaler.transform(df_data.values)
+
+            df_stamp = df_raw[['date']][border1:border2]
+            df_stamp['date'] = pd.to_datetime(df_stamp.date)
+            data_stamp = time_features(df_stamp, timeenc=1, freq='h')
+
+            self.data_x = data[border1:border2]
+            if self.inverse:
+                self.data_y = df_data.values[border1:border2]
+            else:
+                self.data_y = data[border1:border2]
+            self.data_stamp = data_stamp
+
+        def fit(self, data):
+            mean = data.mean()
+            std = data.std()
+            return mean, std
+
+        def inverse_transform(self, output, seq_y, mean, std):
+            output = output *  (mean.unsqueeze(1).unsqueeze(1) + 1)
+            seq_y = seq_y * (mean.unsqueeze(1).unsqueeze(1) + 1)
+            return output, seq_y
+
+        def __len__(self):
+            return len(self.data_x) - self.seq_len- self.pred_len + 1
+        
+        def __getitem__(self, index):
+            s_begin = index
+            s_end = s_begin + self.seq_len
+            r_begin = s_end
+            r_end = r_begin + self.pred_len
+
+            seq_x = self.data_x[s_begin:s_end]
+            seq_y = self.data_y[r_begin:r_end]
+            seq_x_mark = self.data_stamp[s_begin:s_end]
+            seq_y_mark = self.data_stamp[r_begin:r_end]
+
+            mean, std = self.fit(seq_x)
+            if mean > 0:
+                seq_x = seq_x / (mean + 1)
+                seq_y = seq_y / (mean + 1)
+
+            return seq_x, seq_y, seq_x_mark, seq_y_mark, mean, std
 
 def get_all_v(train_data, train_end, seq_len, pred_len, window_stride, type):
     """Get the normalization parameters of each sequence"""
