@@ -2842,6 +2842,7 @@ class FedformerTS():
         self.args.embed = 'timeF'
         self.args.activation = 'gelu'
         self.args.output_attention = False
+        self.args.model_id= self.args.model + '_' + self.args.data + '_' + self.args.pred_len
         # Optimization
         self.args.num_workers = 10
         self.args.itr = 1
@@ -2858,8 +2859,9 @@ class FedformerTS():
         self.args.gpu = 0
         self.args.devices = '0,1,2,3'
         self.args.use_multi_gpu = False
-        self.args.use_gpu = True if torch.cuda.is_available() else False
+        self.args.use_gpu = True 
 
+        self.args.use_gpu = True if torch.cuda.is_available() and self.args.use_gpu else False
         if self.args.use_gpu and self.args.use_multi_gpu: 
             self.args.devices = self.args.devices.replace(' ', '')
             device_ids = self.args.devices.split(',')
@@ -2889,14 +2891,14 @@ class FedformerTS():
             data_root_path (str): Root folder for given dataset. Default: './SYNTHDataset'.
             batch_size (int): Batch size. Default: 32.
             epochs (int): Number of epochs for training the model. Default: 8.
-            pred_len (int): Prediction window length. Default: 24. Recommended: 24, 168, 720.
+            pred_len (int): Prediction window length. Default: 24. Recommended: 24, 48, 168, 336, 720.
         '''
         # temporary line
         possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_multiplicative', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small']
         if data not in possible_datasets:
             raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', 'SYNTH_additive', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal', 'DEWINDh_large', 'DEWINDh_small'.")
         # temporary line
-        possible_predlens = [24, 48, 96, 168, 336, 720]
+        possible_predlens = [24, 48, 168, 336, 720]
         if pred_len not in possible_predlens:
             raise ValueError('Prediction length outside current experiment scope. Please use either 24, 48, 96, 168, 336, 720.')
         self.args.data = data
@@ -2917,7 +2919,7 @@ class FedformerTS():
         # Set up training settings
         self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_at{}_fc{}_eb{}_dt{}_mx{}_{}_{}'.format(self.args.model, self.args.data, self.args.features, 
                 self.args.seq_len, self.args.label_len, self.args.pred_len,
-                self.args.d_model, self.args.n_heads, self.args.s_layers, self.args.d_layers, self.args.d_ff, self.args.attn, self.args.factor, self.args.embed, self.args.distil, self.args.mix, self.args.des, 1)
+                self.args.d_model, self.args.n_heads,  self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, 1)
         # Initialize Model Class
         self.experiment_model = Experiment_Model(self.args)
         # Train
