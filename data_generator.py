@@ -133,7 +133,7 @@ class SynthesisTS:
         return self.result
     
     @staticmethod
-    def add_trend(df=None, trend='Additive', trend_slope=0.01, trend_rate=1.00001, reversal=False, reversal_interval=24*30*3):
+    def add_trend(df=None, trend='Additive', trend_slope=0.01, trend_slope_increment=0.005, accumulated_retain_rate=0.5, trend_rate=1.00001, reversal=False, reversal_interval=24*30*3):
         '''
         Adds trends and optionally reversals to an existing synthesized time series.
 
@@ -141,6 +141,8 @@ class SynthesisTS:
             df(pd.DataFrame, optional): DataFrame containing the synthesized time series to apply trend to. Will use self.result if existing.
             trend(str): Trend type to apply ('Additive' or 'Multiplicative')
             trend_slope (float): Additive trend slope.
+            trend_slope_increment (float): Increase trend_rate when coming up from a decreasing trend --- helps maintain overall rising trend.
+            accumulated_retain_rate (float): How much of the accumulated trend to retain -- helps make additive trend reversals smoother
             trend_rate (float): Multiplicative trend rate.
             reversal (bool): Whether to apply trend reversals.
             reversal_interval (int): How often the reversal occurs - 24*30*3 for quarterly reversals, 24*30*6 for half-a-year.
@@ -167,7 +169,6 @@ class SynthesisTS:
             
             # Variables to handle trend reversals more smoothly
             accumulated = 0
-            increment = trend_slope / 2
             from_increase_path = True
             
             for i in range(0, len(t)):
@@ -178,12 +179,12 @@ class SynthesisTS:
                     # Increment and from_increase_path allow us to increment trend slope when reversing from a decrease
                     # Otherwise it may not catch up
                     if not from_increase_path:
-                        trend_slope += increment
+                        trend_slope += trend_slope_increment
                         from_increase_path = True
                     else:
                         from_increase_path = False
                     # Reset some part of cumulation for trend not to catch up too rapidly
-                    accumulated *= 0.5
+                    accumulated *= accumulated_retain_rate
                 accumulated += trend_slope
                 
                 y[i] += accumulated
