@@ -34,65 +34,14 @@ class SynthesisTS:
         print(f"Generated: {y[0],y[1],y[2]}")
         # Generate individual sine functions to sum up
         for i in range(len(self.cycle_periods)):
-            y += sin_coefficients[i] * np.sin(2 * np.pi / self.cycle_periods[i] * time_points)
-        
-        print(f"Generated: {y[0],y[1],y[2]}")
-
-        
-        if reverse_trend == True:
-            # Define refersal intervals as quarter 24 hours * 30 days * 3 months
-            reverse_interval = 24*30*3
-
-        
-            
-        # Handle trend if given
-        if trend == 'Additive':
-            # Use input or default
-            trend_slope = trend_slope if trend_slope else 0.01
-            accumulated = 0
-            increment = 0.005
-            from_increase_path = True
-            for i in range(0,len(time_points)):
-                if reverse_trend and i % reverse_interval == 0 and i != 0:
-                    # Just reverse direction if trend additive
-                    trend_slope = -trend_slope
-                    if not from_increase_path:
-                        trend_slope += increment
-                        from_increase_path = True
-                    else:
-                        from_increase_path = False
-                    # Reset some part of cumulation for smoothness
-                    accumulated *= 0.5
-                accumulated += trend_slope
-                y[i] += accumulated
-
-                print(f"Additive:{y[0],y[1],y[2]}")
-        
-        # Handle trend if given
-        elif trend == 'Multiplicative':
-            trend_rate = trend_rate if trend_rate else 1.00001
-            reverse_trend_rate = 0.99999
-            current_rate = trend_rate
-            for i in range(0,len(time_points)):
-                if reverse_trend and i % reverse_interval == 0 and i != 0:
-                    if current_rate == trend_rate:
-                        current_rate = reverse_trend_rate
-                    else:
-                        current_rate = trend_rate
-                    # Invert trend rae
-                y[i] = y[i] * ((current_rate ** i))
-            
-                print(f"Multiplicative:{y[0],y[1],y[2]}") 
-       
-        
-    
-        if structural_break == True:
+            y += sin_coefficients[i] * np.sin(2 * np.pi / self.cycle_periods[i] * time_points)    
+        #if structural_break == True:
         # Add in a structural break at a random point in time 
             
-            break_point = random.randint(1,len(time_points))
-            for i in range(len(time_points)):
-                if i > break_point:
-                    y[i] += break_intensity
+            #break_point = random.randint(1,len(time_points))
+            #for i in range(len(time_points)):
+                #if i > break_point:
+                    #y[i] += break_intensity
         return y
         
     # Generates covariates (day of week, hour of day, month of year) for hourly data
@@ -178,4 +127,83 @@ class SynthesisTS:
         series = y + noise
         df = pd.DataFrame({'date': datetime_index, 'TARGET': series.squeeze()})
 
-        return df  
+        # Add as a self variable
+        self.result = df
+
+        return self.result
+    
+    @staticmethod
+    def add_trend(df=None, trend='Additive', trend_slope=0.01, trend_rate=1.00001, reversal=False, reversal_interval=24*30*3):
+        '''
+        Adds trends and optionally reversals to an existing synthesized time series.
+
+        Args:
+            df(pd.DataFrame, optional): DataFrame containing the synthesized time series to apply trend to. Will use self.result if existing.
+            trend(str): Trend type to apply ('Additive' or 'Multiplicative')
+            trend_slope (float): Additive trend slope.
+            trend_rate (float): Multiplicative trend rate.
+            reversal (bool): Whether to apply trend reversals.
+            reversal_interval (int): How often the reversal occurs - 24*30*3 for quarterly reversals, 24*30*6 for half-a-year.
+        '''
+        # If dataframe is not given use self.result
+        if df is None:
+            raise ValueError('No data given: please provide a DataFrame.')
+
+        df = df.copy()
+
+        if trend not in ['Additive', 'Multiplicative']:
+            raise ValueError("Invalid trend type. Use either 'Addtive' or 'Multiplicative'.")
+        
+        # Define series y
+        y = df['TARGET'].values + 100 # to shift by 100
+        # Define time points t
+        t = np.arange(len(y))
+
+        if reversal == True:
+            if not reversal_interval:
+                reversal_interval = 24*30*3 # quaterly by default
+
+        if trend == 'Additive':
+            
+            # Variables to handle trend reversals more smoothly
+            accumulated = 0
+            increment = trend_slope / 2
+            from_increase_path = True
+            
+            for i in range(0, len(t)):
+                if reversal and i % reversal_interval == 0 and i != 0:
+                    # Just reverse direction if trend additive
+                    trend_slope = -trend_slope
+                    
+                    # Increment and from_increase_path allow us to increment trend slope when reversing from a decrease
+                    # Otherwise it may not catch up
+                    if not from_increase_path:
+                        trend_slope += increment
+                        from_increase_path = True
+                    else:
+                        from_increase_path = False
+                    # Reset some part of cumulation for trend not to catch up too rapidly
+                    accumulated *= 0.5
+                accumulated += trend_slope
+                
+                y[i] += accumulated
+
+        
+        # Handle trend if given
+        elif trend == 'Multiplicative':
+            ### Reverse trend rate is the key variable that defines how abrupt of a jump the reversals will be
+            reverse_trend_rate = trend_rate - 0.00002 #### 0.00001 and 0.000015 also good options for a bit smoother but less noticable
+            current_rate = trend_rate
+            for i in range(0,len(t)):
+                if reversal and i % reversal_interval == 0 and i != 0:
+                    if current_rate == trend_rate:
+                        current_rate = reverse_trend_rate
+                    else:
+                        current_rate = trend_rate
+                    # Invert trend rate
+                y[i] = y[i] * ((current_rate ** i))
+                
+
+        result_df = pd.DataFrame({'TARGET': y.squeeze()}, index=df.index)
+        
+        return result_df
