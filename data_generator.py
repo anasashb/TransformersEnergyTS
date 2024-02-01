@@ -124,7 +124,7 @@ class SynthesisTS:
     
     
     @staticmethod
-    def add_multiplicative_trend(df=None, trend_rate=1.00005, reversal_offset=0.00002, reversal=False, reversal_interval=24*30*3):
+    def add_multiplicative_trend(df=None, trend_rate=1.00005, reversal_offset=0.00002, reversal=False, reversal_timepoints=None):
         '''
         Adds a multiplicative trend and optionally reversals to an existing time series.
         
@@ -133,23 +133,22 @@ class SynthesisTS:
             trend_rate (float): Multiplicative trend rate.
             reversal_offset (float): A rate to offset the trend rate by to make reversals smoother.
             reversal (bool): Whether to apply trend reversals.
+            reversal_timepoints (list[int]): A list of time steps t at which reversals should happen.
         '''
         if df is None:
             raise ValueError('No data given: please provide a DataFrame.')
-        
+        if reversal and reversal_timepoints is None:
+            raise ValueError('No reversal time points given. Please provide a list[int].')
+
         df = df.copy()
         y = df['TARGET'].values + 100 # to shift by 100 remove this later
         # Define time points t
         t = np.arange(len(y))
-
-        if reversal == True:
-            if not reversal_interval:
-                reversal_interval = 24*30*3 # quaterly by default
-        
+       
         reverse_trend_rate = trend_rate - reversal_offset #### 0.00001 and 0.000015 also good options for a bit smoother but less noticable
         current_rate = trend_rate
         for i in range(0,len(t)):
-            if reversal and i % reversal_interval == 0 and i != 0:
+            if reversal and i in reversal_timepoints:
                 if current_rate == trend_rate:
                     current_rate = reverse_trend_rate
                 else:
@@ -164,7 +163,7 @@ class SynthesisTS:
     
     
     @staticmethod
-    def add_additive_trend(df=None, trend_slope=0.01, trend_slope_increment=0.005, accumulated_retain_rate=0.5, reversal=False, reversal_interval=24*30*3):
+    def add_additive_trend(df=None, trend_slope=0.01, trend_slope_increment=0.005, accumulated_retain_rate=0.5, reversal=False, reversal_timepoints=None):
         '''
         Adds an additive trend and optionally reversals to an existing time series.
 
@@ -175,10 +174,14 @@ class SynthesisTS:
             trend_slope_increment (float): Increase trend_rate when coming up from a decreasing trend --- helps maintain overall rising trend.
             accumulated_retain_rate (float): How much of the accumulated trend to retain -- helps make additive trend reversals smoother
             reversal (bool): Whether to apply trend reversals.
+            reversal_timepoints (list[int]): A list of time steps t at which reversals should happen.
         '''
         # If dataframe is not given use self.result
         if df is None:
             raise ValueError('No data given: please provide a DataFrame.')
+        
+        if reversal and reversal_timepoints is None:
+            raise ValueError('No reversal time points given. Please provide a list[int].')
 
         df = df.copy()
         
@@ -186,21 +189,15 @@ class SynthesisTS:
         y = df['TARGET'].values + 100 # to shift by 100 remove this later
         # Define time points t
         t = np.arange(len(y))
-
-        if reversal == True:
-            if not reversal_interval:
-                reversal_interval = 24*30*3 # quaterly by default
-
-            
+  
         # Variables to handle trend reversals more smoothly
         accumulated = 0
         from_increase_path = True
             
         for i in range(0, len(t)):
-            if reversal and i % reversal_interval == 0 and i != 0:
+            if reversal and i in reversal_timepoints:
                 # Just reverse direction if trend additive
                 trend_slope = -trend_slope
-                    
                 # Increment and from_increase_path allow us to increment trend slope when reversing from a decrease
                 # Otherwise it may not catch up
                 if not from_increase_path:
