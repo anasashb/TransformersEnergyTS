@@ -14,7 +14,7 @@ from Pyraformer.utils.tools import TopkMSELoss, metric
 
 ###########################################################################################################################
 # Our Simple User Interface ###############################################################################################
-class PyraformerTS():
+class PyraformerTSS():
     '''
     Our custom wrapper class (in progress) to provide an user-friendly interface to fitting and testing the Informer model. 
     The class will be extended to accomodate other models within the scope of the project.
@@ -95,7 +95,7 @@ class PyraformerTS():
         self.iter_num = 5
         #opt = parser.parse_args()
         #return opt
-        self.device = "cuda"
+        self.device = "cpu"
 
         parser = argparse.ArgumentParser()
 
@@ -106,6 +106,8 @@ class PyraformerTS():
         self.covariate_size = parser.covariate_size
         self.seq_num = parser.seq_num
         self.embed_type = parser.embed_type
+        self.model = eval(self.model).Model(self)
+        
 
     def compile(self, learning_rate=1e-4, loss='mse', early_stopping_patience=3):
         '''
