@@ -13,14 +13,16 @@ class SynthesisTS:
     to reflect the order of operations in the synthesis process.
     Further documentation and comments were added.
     '''
-    def __init__(self, cycle_periods=[24, 168, 720], series_amount=1, seq_len=720*20):
+    def __init__(self, cycle_periods=[24, 7*24, 30*24], distort_cycles=[(24 // 2, 2*24), (5*24, 9*24), (29*24, 60*24)], series_amount=1, seq_len=17420):
         '''
         Args:
-            cycle_periods (list[int1, int2, int3]): Cycle periods to model dependency. For hourly data = [24, 168, 720] which == [day, week, month].
+            cycle_periods (list[int, int, int]): Cycle periods to model dependency. For hourly data = [24, 168, 720] which == [day, week, month].
+            distort_cyles (list[tuple(int, int), tuple(int, int), tuple(int, int)]): Optionally distort the cycle periods to model dependencies.
             series_amount (int): How many synthetic series to generate. (default = 60)
             seq_len (int): The length of the synthetic series to be generated. (default = 20 months)  
         '''
         self.cycle_periods = cycle_periods
+        self.distort_cycles = distort_cycles
         self.series_amount = series_amount
         self.seq_len = seq_len
 
@@ -29,39 +31,29 @@ class SynthesisTS:
         '''
         Generates a mixed sinusoidal sequence given the amount of cycle periods, time points, and the amount of coefficients for individual sine functions.            
         '''
+        if self.distort_cycles:
+            if len(self.distort_cycles)!= len(self.cycle_periods):
+                raise ValueError('The lengths of cycle_periods and distort_cycles arrays do not match.')
         # Empty array corresponding to time points
-        y = np.full(len(time_points),100.0)
+        y = np.full(len(time_points), 100.0)
         
         # Generate individual sine functions to sum up
         for i in range(len(self.cycle_periods)):
-            y += sin_coefficients[i] * np.sin(2 * np.pi / self.cycle_periods[i] * time_points)    
+            # If distortion chosen
+            if self.distort_cycles:
+                # Get minimum and maximum points
+                min_point, max_point = self.distort_cycles[i]
+                # container 
+                sines = np.zeros((max_point - min_point + 1, len(time_points)))
+                # Iterate over the range and generate a sine wave for each parameter
+                for j, period in enumerate(range(min_point, max_point + 1)):
+                    sines[j, :] = sin_coefficients[i] * np.sin(2 * np.pi / period * time_points)
+
+                y += np.mean(sines, axis=0)
+            else:
+                y += sin_coefficients[i] * np.sin(2 * np.pi / self.cycle_periods[i] * time_points)    
 
         return y
-        
-    # Generates covariates (day of week, hour of day, month of year) for hourly data
-    # will need amendments if we go with 15-minute frequency data
-    def _gen_covariates(self, time_points, index):
-        '''
-        Generates covariates for each hourly time point t - day of week, hour of the day and month of year.
-        '''
-        # Set up empty array with same length as time points and 4 columns
-        covariates = np.zeros((time_points.shape[0], 4))
-        # Generate day of week for each time point t
-        covariates[:, 0] = (time_points // 24) % 7
-        # Generate our of the day for each time point t
-        covariates[:, 1] = time_points % 24
-        # Generate month for each time point t
-        covariates[:, 2] = (time_points // (24 * 30)) % 12
-        # Normalize day of week on MinMax (0, 1)
-        covariates[:, 0] = covariates[:, 0] / 6
-        # Normalize hour of the day on MinMax (0, 1)
-        covariates[:, 1] = covariates[:, 1] / 23
-        # Normalize month of year on MinMax (0, 1)
-        covariates[:, 2] = covariates[:, 2] / 11
-        # Add new column that tracks which time series the covariates are for
-        covariates[:, -1] = np.zeros(time_points.shape[0]) + index
-        # Return
-        return covariates
 
     # Defines a polynomially decaying covariance of B_0
     def _polynomial_decay_cov(self):
@@ -141,7 +133,7 @@ class SynthesisTS:
             raise ValueError('No reversal time points given. Please provide a list[int].')
 
         df = df.copy()
-        y = df['TARGET'].values + 100 # to shift by 100 remove this later
+        y = df['TARGET'].values
         # Define time points t
         t = np.arange(len(y))
        
@@ -169,7 +161,6 @@ class SynthesisTS:
 
         Args:
             df(pd.DataFrame, optional): DataFrame containing the synthesized time series to apply trend to. Will use self.result if existing.
-            trend(str): Trend type to apply ('Additive' or 'Multiplicative')
             trend_slope (float): Additive trend slope.
             trend_slope_increment (float): Increase trend_rate when coming up from a decreasing trend --- helps maintain overall rising trend.
             accumulated_retain_rate (float): How much of the accumulated trend to retain -- helps make additive trend reversals smoother
@@ -186,7 +177,7 @@ class SynthesisTS:
         df = df.copy()
         
         # Define series y
-        y = df['TARGET'].values + 100 # to shift by 100 remove this later
+        y = df['TARGET'].values
         # Define time points t
         t = np.arange(len(y))
   
