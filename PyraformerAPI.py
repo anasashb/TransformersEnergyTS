@@ -1,4 +1,4 @@
-# A script file to easily and convinently run and use the Pyaformer model. Includes a wrapper class for the model that can be imported and easily used for training and prediction.
+# A script file to easily and convinently run and use the Pyraformer model. Includes a wrapper class for the model that can be imported and easily used for training and prediction.
 
 # Imports
 import argparse
@@ -2141,7 +2141,7 @@ class PyraformerTS():
         # CSCM structure. selection: [Bottleneck_Construct, Conv_Construct, MaxPooling_Construct, AvgPooling_Construct]
         self.args.CSCM = 'Bottleneck_Construct'
         self.args.truncate = False
-        self.args.use_tvm = False
+        self.args.use_tvm = True
         # Experiment repeat times.
         self.args.iter_num = 1 
         if torch.cuda.is_available():
