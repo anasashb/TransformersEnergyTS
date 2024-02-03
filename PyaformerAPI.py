@@ -2014,7 +2014,7 @@ def eval_epoch(model, test_dataset, test_loader, opt, epoch):
     mae, mse, rmse, mape, mspe = metric(preds, trues)
     print('Epoch {}, mse:{}, mae:{}, rmse:{}, mape:{}, mspe:{}'.format(epoch, mse, mae, rmse, mape, mspe))
 
-    return mse, mae, rmse, mape, mspe
+    return mse, mae, rmse, mape, mspe , preds , trues
 
 
 def train(model, optimizer, scheduler, opt, model_save_dir):
@@ -2037,7 +2037,7 @@ def train(model, optimizer, scheduler, opt, model_save_dir):
               'elapse: {elapse:3.3f} min'
               .format(mse=train_mse, elapse=(time.time() - start) / 60))
 
-        mse, mae, rmse, mape, mspe = eval_epoch(model, test_dataset, test_dataloader, opt, epoch_i)
+        mse, mae, rmse, mape, mspe , _ , _ = eval_epoch(model, test_dataset, test_dataloader, opt, epoch_i)
 
         scheduler.step()
 
@@ -2068,14 +2068,21 @@ def evaluate(model, opt, model_save_dir):
     model.load_state_dict(checkpoint)
 
     best_metrics = []
-    mse, mae, rmse, mape, mspe = eval_epoch(model, test_dataset, test_dataloader, opt, 0)
+    mse, mae, rmse, mape, mspe , preds , trues = eval_epoch(model, test_dataset, test_dataloader, opt , 1)
 
     current_metrics = [float(mse), float(mae), float(rmse), float(mape), float(mspe)]
     if best_mse > mse:
         best_mse = mse
         best_metrics = current_metrics
-
-    return best_metrics
+    print('mse:{}, mae:{}'.format(mse, mae))
+    # result save
+    folder_path = './results/' + opt.model + '_' + opt.data + '_' + opt.input_size + '_' + opt.pred_len + '/'
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+    np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
+    np.save(folder_path + 'pred.npy', preds)
+    np.save(folder_path + 'true.npy', trues)
+    return preds , trues , mse, mae
 
 ###########################################################################################################################
 # Our Simple User Interface ###############################################################################################
@@ -2173,9 +2180,10 @@ class PyraformerTS():
         self.args.epoch = epochs
         self.args.batch_size = batch_size
         self.args.predict_step = pred_len
-        self.model_save_dir = 'Pyraformer/trained_models/{}/{}/{}.pth'.format(self.args.data, self.args.input_size, 
+        self.model_save_dir = 'Pyraformer/trained_models/{}_{}_{}/'.format(self.args.data, self.args.input_size, 
                                                                            self.args.predict_step)
         os.makedirs(self.model_save_dir, exist_ok=True)
+        self.model_save_dir += 'best_iter.pth'
         if self.args.eval:
             best_metrics = evaluate(self.model, self, self.model_save_dir)
         else:
@@ -2187,7 +2195,23 @@ class PyraformerTS():
             scheduler = optim.lr_scheduler.StepLR(optimizer, 1, gamma=self.args.lr_step)
             self.model = train(self.model, optimizer, scheduler, self.args, self.model_save_dir)
         return 
-  
+    
+    def predict(self):
+        '''
+        Makes predictions on pre-defined test set. Does not require any arguments.
+        Returns:
+            preds: A 3D array of predictions of the following shape (number of windows, number of time points per window, number of targets.)
+            As self variables, trues, mse, mae, all_metrics, and first_batch_test can also be called. 
+        '''
+        checkpoint = torch.load(self.model_save_dir)["state_dict"]
+        self.model.load_state_dict(checkpoint)
+        if not self.model:
+            raise ValueError('No model trained. Make sure to run .fit() first.')
+        # Predict
+        self.preds, self.trues, self.mse, self.mae = evaluate(self.model , self.args, self.model_save_dir)
+        # Clear memory
+        torch.cuda.empty_cache()
+        return self.preds
 
 
 
