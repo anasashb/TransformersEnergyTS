@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import random
+from statsmodels.tsa.stattools import adfuller
+
 
 ### Implementation of the energy data synthesizer ammended from Pyraformer
 class SynthesisTS:
@@ -206,3 +208,27 @@ class SynthesisTS:
         result_df = pd.DataFrame({'TARGET': y.squeeze()}, index=df.index)
         
         return result_df
+    
+
+def describe_and_test(time_series):
+    '''
+    Prints descriptive statistics and conducts Augmented Dickey-Fuller unit-root test on given time series.
+    
+    Args:
+        time_series (pd.Series, pd.DataFrame): Time series sequence given as either pandas.Series or single-column pandas.DataFrame.
+    '''
+    test_result = adfuller(time_series)
+    print('='*60)
+    print('DESCRIPTIVE STATISTICS:')
+    print('-'*60)
+    print(time_series.describe())
+    print('='*60)
+    print('ADF TEST RESULTS:')
+    print('-'*60)
+    print(f'Test Statistic:  {test_result[0]:.4f}')
+    print(f'p-value:  {test_result[1]:.4f}')
+    if test_result[1] < 0.05:
+        print('Null hypothesis of non-stationarity can be rejected.')
+    else:
+        print('Null hypothesis of non-stationarity cannot be rejected.')
+    print('='*60)
