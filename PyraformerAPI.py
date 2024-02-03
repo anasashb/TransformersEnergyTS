@@ -2193,7 +2193,7 @@ class PyraformerTS():
             """ optimizer and scheduler """
             optimizer = optim.Adam(filter(lambda x: x.requires_grad, self.model.parameters()), self.args.lr)
             scheduler = optim.lr_scheduler.StepLR(optimizer, 1, gamma=self.args.lr_step)
-            self.model = train(self.model, optimizer, scheduler, self.args, self.model_save_dir)
+            train(self.model, optimizer, scheduler, self.args, self.model_save_dir)
         return 
     
     def predict(self):
@@ -2203,8 +2203,8 @@ class PyraformerTS():
             preds: A 3D array of predictions of the following shape (number of windows, number of time points per window, number of targets.)
             As self variables, trues, mse, mae, all_metrics, and first_batch_test can also be called. 
         '''
-        checkpoint = torch.load(self.model_save_dir)["state_dict"]
-        self.model.load_state_dict(checkpoint)
+        #checkpoint = torch.load(self.model_save_dir)["state_dict"]
+        #self.model.load_state_dict(checkpoint)
         if not self.model:
             raise ValueError('No model trained. Make sure to run .fit() first.')
         # Predict
