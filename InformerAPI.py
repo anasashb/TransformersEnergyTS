@@ -1996,4 +1996,4 @@ class InformerTS():
         self.preds, self.trues, self.mse, self.mae, self.all_metrics, self.first_batch_test = self.experiment_model.test(self.setting)
         # Clear memory
         torch.cuda.empty_cache()
-        return self.preds, self.trues
+        return self.preds
