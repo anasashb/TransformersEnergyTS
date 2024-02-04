@@ -1,0 +1,2 @@
+model_checkpoint_path: "TSMixer_SYNTHh_S_sl96_pl24_lr0.0001_ntB_relu_nb2_dp0.05_fd2048_best"
+all_model_checkpoint_paths: "TSMixer_SYNTHh_S_sl96_pl24_lr0.0001_ntB_relu_nb2_dp0.05_fd2048_best"

@@ -1574,6 +1574,7 @@ class Exp_Informer(Exp_Basic):
             #'Solar':Dataset_Custom,
             #'custom':Dataset_Custom,
             'SYNTHh1':Dataset_SYNTH_hour,
+            'SYNTHh': Dataset_SYNTH_hour,
             'SYNTHh2':Dataset_SYNTH_hour,
             'SYNTH_additive': Dataset_SYNTH_additive,
             'SYNTH_additive_reversal': Dataset_SYNTH_additive_reversal,
@@ -1945,7 +1946,7 @@ class InformerTS():
             pred_len (int): Prediction window length. Default: 24. Recommended: 24, 168, 720.
         '''
         # temporary line
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal', 'DEWINDh_large', 'DEWINDh_small']
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal', 'DEWINDh_large', 'DEWINDh_small', 'SYNTHh']
         if data not in possible_datasets:
             raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', 'SYNTH_additive', 'SYNTH_additive_reversal', 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal', 'DEWINDh_large', 'DEWINDh_small'.")
         # temporary line
@@ -1995,4 +1996,4 @@ class InformerTS():
         self.preds, self.trues, self.mse, self.mae, self.all_metrics, self.first_batch_test = self.experiment_model.test(self.setting)
         # Clear memory
         torch.cuda.empty_cache()
-        return self.preds
+        return self.preds, self.trues
