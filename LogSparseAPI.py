@@ -1945,11 +1945,11 @@ class Exp_Logsparse(Exp_Basic):
 
         mae, mse, rmse, mape, mspe = metric(preds, trues)
 
-        preds_un = test_data.inverse_transform(preds)
-        trues_un = test_data.inverse_transform(trues)
-        mae_un, mse_un, rmse_un, mape_un, mspe_un = metric(preds_un, trues_un)
-
-        losses = {
+        if self.args.inverse:
+            preds_un = test_data.inverse_transform(preds)
+            trues_un = test_data.inverse_transform(trues)
+            mae_un, mse_un, rmse_un, mape_un, mspe_un = metric(preds_un, trues_un)
+            losses = {
             'mae_sc': mae,
             'mse_sc': mse,
             'rmse_sc': rmse,
@@ -1961,7 +1961,15 @@ class Exp_Logsparse(Exp_Basic):
             'rmse_un': rmse_un,
             'mape_un': mape_un,
             'mspe_un': mspe_un,
-        }
+            }
+        else:
+            losses = {
+            'mae_sc': mae,
+            'mse_sc': mse,
+            'rmse_sc': rmse,
+            'mape_sc': mape,
+            'mspe_sc': mspe,
+            }
 
         if not save_flag:
             return losses
@@ -1975,9 +1983,11 @@ class Exp_Logsparse(Exp_Basic):
         np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
         np.save(folder_path + 'pred.npy', preds)
         np.save(folder_path + 'true.npy', trues)
-        np.save(folder_path + 'pred_un.npy', preds_un)
-        np.save(folder_path + 'true_un.npy', trues_un)
-        np.save(folder_path + 'metrics_un.npy', np.array([mae_un, mse_un, rmse_un, mape_un, mspe_un]))
+
+        if self.args.inverse:
+            np.save(folder_path + 'pred_un.npy', preds_un)
+            np.save(folder_path + 'true_un.npy', trues_un)
+            np.save(folder_path + 'metrics_un.npy', np.array([mae_un, mse_un, rmse_un, mape_un, mspe_un]))
 
         with open(folder_path + 'metrics.txt', 'w') as f:
             f.write('mse: ' + str(mse) + '\n')
@@ -2007,6 +2017,7 @@ class LogsparseTS():
         self.args.plot_flat = 0
         self.args.verbose = 1
         self.args.is_trainging = 1
+        self.args.inverse = False
         # data loader
         self.args.data = 'Synth1'
         self.args.root_path = './SYNTHDataset'
