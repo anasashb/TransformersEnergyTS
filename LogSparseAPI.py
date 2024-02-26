@@ -337,7 +337,7 @@ class Dataset_WIND_hour(Dataset):
 
     def __read_data__(self):
         self.scaler = StandardScaler()
-        _path = os.path.join(self.root_path, self.flag, self.data_path).replace('\\', '/')  # replace in case windows
+        _path = os.path.join(self.root_path, self.data_path).replace('\\', '/')  # replace in case windows
         df_raw = pd.read_csv(_path)
 
         # Fit scaler based on training data only
@@ -2016,7 +2016,7 @@ class LogsparseTS():
         self.args.model = model
         self.args.plot_flat = 0
         self.args.verbose = 1
-        self.args.is_trainging = 1
+        self.args.is_training = 1
         self.args.inverse = False
         # data loader
         self.args.data = 'Synth1'
@@ -2111,8 +2111,8 @@ class LogsparseTS():
             raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reveral' 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small'.")
         # temporary line
         possible_predlens = [24, 48, 168, 336, 720]
-        if pred_len not in possible_predlens:
-            raise ValueError('Prediction length outside current experiment scope. Please use either 24, 48, 168, 336, 720.')
+        #if pred_len not in possible_predlens:
+            #raise ValueError('Prediction length outside current experiment scope. Please use either 24, 48, 168, 336, 720.')
         self.args.data = data
         self.args.root_path = data_root_path
         self.args.data_path = f'{self.args.data}.csv'
