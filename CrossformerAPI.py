@@ -129,6 +129,86 @@ class StandardScaler():
         std = torch.from_numpy(self.std).type_as(data).to(data.device) if torch.is_tensor(data) else self.std
         return (data * std) + mean
     
+class Dataset_ETT_hour(Dataset):
+    def __init__(self, root_path, data_path='ETTh1.csv', flag='train', size=None, 
+                  data_split = [0.7, 0.1, 0.2], scale=True, inverse=False, scale_statistic=None):
+        # size [seq_len, label_len, pred_len]
+        # info
+        self.seq_len = size[0]
+        self.pred_len = size[1]
+        # init
+        assert flag in ['train', 'test', 'val']
+        type_map = {'train':0, 'val':1, 'test':2}
+        self.set_type = type_map[flag]
+        
+        self.scale = scale
+        self.inverse = inverse
+        
+        self.root_path = root_path
+        self.data_path = data_path
+        self.data_split = data_split
+        self.scale_statistic = scale_statistic
+        self.__read_data__()
+
+    def __read_data__(self):
+        df_raw = pd.read_csv(os.path.join(self.root_path,
+                                          self.data_path))
+        if self.data_split:
+            if (self.data_split[0] > 1):
+                train_num = self.data_split[0]; val_num = self.data_split[1]; test_num = self.data_split[2];
+            else:
+                train_num = int(len(df_raw)*self.data_split[0]); 
+                test_num = int(len(df_raw)*self.data_split[2])
+                val_num = len(df_raw) - train_num - test_num; 
+            border1s = [0, train_num - self.seq_len, train_num + val_num - self.seq_len]
+            border2s = [train_num, train_num+val_num, train_num + val_num + test_num]
+
+        else:
+            # Define borders just as Informer/Autoformer
+            border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
+            border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1 = border1s[self.set_type]
+        border2 = border2s[self.set_type]
+        
+        cols_data = df_raw.columns[1:]
+        df_data = df_raw[cols_data]
+
+        if self.scale:
+            if self.scale_statistic is None:
+                self.scaler = StandardScaler()
+                train_data = df_data[border1s[0]:border2s[0]]
+                self.scaler.fit(train_data.values)
+            else:
+                self.scaler = StandardScaler(mean = self.scale_statistic['mean'], std = self.scale_statistic['std'])
+            data = self.scaler.transform(df_data.values)
+        else:
+            data = df_data.values
+
+        self.data_x = data[border1:border2]
+        if self.inverse:
+        ## Then data y is defined from unscaled values
+            self.data_y = df_data[border1:border2]
+        else:
+            # Include scaled data as y
+            self.data_y = data[border1:border2]
+    
+    def __getitem__(self, index):
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        r_begin = s_end
+        r_end = r_begin + self.pred_len
+
+        seq_x = self.data_x[s_begin:s_end]
+        seq_y = self.data_y[r_begin:r_end]
+
+        return seq_x, seq_y
+    
+    def __len__(self):
+        return len(self.data_x) - self.seq_len- self.pred_len + 1
+
+    def inverse_transform(self, data):
+        return self.scaler.inverse_transform(data)
+    
 class Dataset_WIND_hour(Dataset):
     '''
     PyTorch dataloader class for an hourly dataset that is an adaptation of the original Dataset_MTS in Crossformer combined
@@ -184,8 +264,8 @@ class Dataset_WIND_hour(Dataset):
         # If data_split is not given: -- here we split just as the informer autoformer
         else:
             # Define borders just as Informer/Autoformer
-            border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-            border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+            border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+            border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
 
         ### If you want to check the actual sequence lengths in the training, validation and test sets
         ### Before the data is turned into windows
@@ -311,9 +391,8 @@ class Dataset_SYNTH_hour(Dataset):
         
         # If data_split is not given: -- here we split just as the informer autoformer
         else:
-            # Define borders just as Informer/Autoformer
-            border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-            border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+            border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+            border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
 
         ### If you want to check the actual sequence lengths in the training, validation and test sets
         ### Before the data is turned into windows
@@ -436,8 +515,8 @@ class Dataset_SYNTH_additive(Dataset):
         # If data_split is not given: -- here we split just as the informer autoformer
         else:
             # Define borders just as Informer/Autoformer
-            border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-            border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+            border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+            border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
 
         ### If you want to check the actual sequence lengths in the training, validation and test sets
         ### Before the data is turned into windows
@@ -560,8 +639,8 @@ class Dataset_SYNTH_additive_reversal(Dataset):
         # If data_split is not given: -- here we split just as the informer autoformer
         else:
             # Define borders just as Informer/Autoformer
-            border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-            border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+            border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+            border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
 
         ### If you want to check the actual sequence lengths in the training, validation and test sets
         ### Before the data is turned into windows
@@ -684,8 +763,8 @@ class Dataset_SYNTH_multiplicative(Dataset):
         # If data_split is not given: -- here we split just as the informer autoformer
         else:
             # Define borders just as Informer/Autoformer
-            border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-            border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+            border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+            border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
 
         ### If you want to check the actual sequence lengths in the training, validation and test sets
         ### Before the data is turned into windows
@@ -808,8 +887,8 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
         # If data_split is not given: -- here we split just as the informer autoformer
         else:
             # Define borders just as Informer/Autoformer
-            border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-            border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+            border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+            border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
 
         ### If you want to check the actual sequence lengths in the training, validation and test sets
         ### Before the data is turned into windows
@@ -1380,13 +1459,13 @@ class Exp_crossformer(Exp_Basic):
 
         ########## B.A: Added data dictionary
         data_dict = {
+            'ETTh1': Dataset_ETT_hour,
             'SYNTHh1': Dataset_SYNTH_hour,
             'SYNTHh2': Dataset_SYNTH_hour,
             'SYNTH_additive': Dataset_SYNTH_additive,
             'SYNTH_additive_reversal': Dataset_SYNTH_additive_reversal,
             'SYNTH_multiplicative': Dataset_SYNTH_multiplicative,
             'SYNTH_multiplicative_reversal': Dataset_SYNTH_multiplicative_reversal,
-            'DEWINDh_large': Dataset_WIND_hour,
             'DEWINDh_small': Dataset_WIND_hour            
         }
 
@@ -1565,7 +1644,7 @@ class Exp_crossformer(Exp_Basic):
         print('test shape:', preds.shape, trues.shape)
 
         # result save
-        folder_path = './results/' + setting +'/'
+        folder_path = './results/' + setting + '_iter_' + str(self.iter) + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
@@ -1581,7 +1660,7 @@ class Exp_crossformer(Exp_Basic):
             np.save(folder_path+'true.npy', trues)
         
         # Added returns
-        return preds, trues, mse, mae, all_metrics, first_batch_test
+        return preds, trues, mse, mae, mape, all_metrics, first_batch_test
 
     def _process_one_batch(self, dataset_object, batch_x, batch_y, inverse = False):
         batch_x = batch_x.float().to(self.device)
@@ -1601,11 +1680,13 @@ class Exp_crossformer(Exp_Basic):
         args = self.args
         ########## B.A: Added data dictionary
         data_dict = {
+            'ETTh1': Dataset_ETT_hour,
             'SYNTHh1': Dataset_SYNTH_hour,
             'SYNTHh2': Dataset_SYNTH_hour,
             'SYNTH_additive': Dataset_SYNTH_additive,
+            'SYNTH_additive_reversal': Dataset_SYNTH_additive_reversal,
             'SYNTH_multiplicative': Dataset_SYNTH_multiplicative,
-            'DEWINDh_large': Dataset_WIND_hour,
+            'SYNTH_multiplicative_reversal': Dataset_SYNTH_multiplicative_reversal,
             'DEWINDh_small': Dataset_WIND_hour            
         }
 
@@ -1651,7 +1732,7 @@ class Exp_crossformer(Exp_Basic):
         metrics_mean = metrics_all.sum(axis = 0) / instance_num
 
         # result save
-        folder_path = './results/' + setting +'/'
+        folder_path = './results/' + setting + '_iter_' + str(self.iter) + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
@@ -1680,9 +1761,8 @@ class CrossformerTS():
             raise ValueError("Model not supported. Please use 'crossformer'.")
         # Initialize dot dictionary
         self.args = dotdict()
-        self.args.checkpoints =  './crossformer_checkpoints/'
-        # Default 96 input we have in all models
-        self.args.seq_len = 96
+        self.args.checkpoints =  './checkpoints/'
+        self.args.seq_len = 168
         # Segment length
         self.args.seg_len = 6
         # Window size for segment merge
@@ -1702,10 +1782,8 @@ class CrossformerTS():
         self.args.baseline = False
         self.args.num_workers = 0
         self.args.lradj = 'type1'
-        #self.args.itr = 1 ###### I leave this out and so the training loop is also different
-        ### B.A. Crossformer only saves predictions if save_pred is explicitly true
-        # We can get rid of this above to make sure it always saves
-        self.args.save_pred = False
+        self.args.itr = 3 
+        self.args.save_pred = True
         self.args.use_gpu = True
         self.args.use_multi_gpu = False
         self.args.gpu = 0
@@ -1726,14 +1804,13 @@ class CrossformerTS():
         # As shown above, it can have a split argument with absolute numbers (lengths) or ratios, or keep empty and will resort
         # to our predefined borders --- this will be same as using 12*30*24, 4*30*24, 4*30*24 specification in 'split':
         self.data_parser = {
-            'SYNTHh1':{'data':'SYNTHh1.csv', 'data_dim':1, 'split':[]},
-            'SYNTHh2':{'data':'SYNTHh2.csv', 'data_dim':1, 'split':[12*30*24, 4*30*24, 4*30*24]},
-            'SYNTH_additive':{'data':'SYNTH_additive.csv', 'data_dim':1, 'split':[]},
-            'SYNTH_additive_reversal':{'data':'SYNTH_additive_reversal.csv', 'data_dim':1, 'split':[]},
-            'SYNTH_multiplicative':{'data':'SYNTH_multiplicative.csv', 'data_dim':1, 'split':[]},
-            'SYNTH_multiplicative_reversal':{'data':'SYNTH_multiplicative_reversal.csv', 'data_dim':1, 'split':[]},
-            'DEWINDh_large':{'data':'DEWINDh_large.csv', 'data_dim':1, 'split':[0.7, 0.1, 0.2]},
-            'DEWINDh_small':{'data':'DEWINDh_small.csv', 'data_dim':1, 'split':[12*30*24, 4*30*24, 4*30*24]},
+            'ETTh1':{'data':'ETTh1.csv', 'data_dim':7, 'split':[12*30*24, 4*30*24, 4*30*24]},
+            'SYNTHh1':{'data':'SYNTHh1.csv', 'data_dim':1, 'split':[18*30*24, 3*30*24, 3*30*24]},
+            'SYNTH_additive':{'data':'SYNTH_additive.csv', 'data_dim':1, 'split':[18*30*24, 3*30*24, 3*30*24]},
+            'SYNTH_additive_reversal':{'data':'SYNTH_additive_reversal.csv', 'data_dim':1, 'split':[18*30*24, 3*30*24, 3*30*24]},
+            'SYNTH_multiplicative':{'data':'SYNTH_multiplicative.csv', 'data_dim':1, 'split':[18*30*24, 3*30*24, 3*30*24]},
+            'SYNTH_multiplicative_reversal':{'data':'SYNTH_multiplicative_reversal.csv', 'data_dim':1, 'split':[18*30*24, 3*30*24, 3*30*24]},
+            'DEWINDh_small':{'data':'DEWINDh_small.csv', 'data_dim':1, 'split':[18*30*24, 3*30*24, 3*30*24]},
         }
     
     def compile(self, learning_rate=1e-4, loss='mse', early_stopping_patience=3):
@@ -1750,7 +1827,8 @@ class CrossformerTS():
         self.args.loss = loss
         self.args.patience = early_stopping_patience
 
-    def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=20, pred_len=24):
+    def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=20, pred_len=24 ,
+            seq_len = 168):
         '''
         Fits the crossformer model.
         Args:
@@ -1761,9 +1839,9 @@ class CrossformerTS():
             pred_len (int): Prediction window length. Default: 24. Recommended: 24, 168, 720.
         '''
         # temporary line
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small']
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' , 'ETTh1']
         if data not in possible_datasets:
-            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reversal', 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal',  'DEWINDh_large', 'DEWINDh_small'.")
+            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reversal', 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal',  'DEWINDh_large', 'DEWINDh_small' ,'ETTh1'.")
         # temporary line
         possible_predlens = [24, 48, 96, 168, 336, 720]
         if pred_len not in possible_predlens:
@@ -1774,6 +1852,7 @@ class CrossformerTS():
         self.args.train_epochs = epochs
         self.args.batch_size = batch_size
         self.args.pred_len = pred_len
+        self.args.seq_len = seq_len
         if self.args.data in self.data_parser.keys():
             self.data_info = self.data_parser[self.args.data]
             self.args.data_path = self.data_info['data']
@@ -1787,9 +1866,9 @@ class CrossformerTS():
         print('='*150)            
 
         Experiment_Model = Exp_crossformer
-        self.setting = 'Crossformer_{}_il{}_pl{}_sl{}_win{}_fa{}_dm{}_nh{}_el{}_itr{}'.format(self.args.data,
-                    self.args.seq_len, self.args.pred_len, self.args.seg_len, self.args.win_size, self.args.factor,
-                    self.args.d_model, self.args.n_heads, self.args.e_layers, 1)
+        self.setting = 'Crossformer_{}_il{}_pl{}_sl{}_win{}_fa{}_dm{}_nh{}_el{}_itr{}'.format(self.args.data, self.args.seq_len, self.args.pred_len, 
+                            self.args.seg_len, self.args.win_size, self.args.factor,
+                            self.args.d_model, self.args.n_heads, self.args.e_layers, self.iter)
         # Initialize model class
         self.experiment_model = Experiment_Model(self.args)
         # Train
@@ -1804,7 +1883,7 @@ class CrossformerTS():
             As self variables, trues, mse, mae, all_metrics, and first_batch_test can also be called. 
         '''
         # Predict
-        self.preds, self.trues, self.mse, self.mae, self.all_metrics, self.first_batch_test = self.experiment_model.test(self.setting)
+        self.preds, self.trues, self.mse, self.mae, self.mape, self.all_metrics, self.first_batch_test = self.experiment_model.test(self.setting)
         # Clear memory
         torch.cuda.empty_cache()
         return self.preds

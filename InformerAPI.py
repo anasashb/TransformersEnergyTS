@@ -298,6 +298,93 @@ def time_features(dates, timeenc=1, freq='h'):
 
 ###########################################################################################################################
 # The actual data loaders #################################################################################################
+    
+class Dataset_ETT_hour(Dataset):
+    def __init__(self, root_path, flag='train', size=None, 
+                 features='M', data_path='ETTh1.csv', 
+                 target='OT', scale=True, inverse=False, timeenc=0, freq='h', cols=None):
+        # size [seq_len, label_len, pred_len]
+        # info
+        if size == None:
+            self.seq_len = 24*4*4
+            self.label_len = 24*4
+            self.pred_len = 24*4
+        else:
+            self.seq_len = size[0]
+            self.label_len = size[1]
+            self.pred_len = size[2]
+        # init
+        assert flag in ['train', 'test', 'val']
+        type_map = {'train':0, 'val':1, 'test':2}
+        self.set_type = type_map[flag]
+        
+        self.features = features
+        self.target = target
+        self.scale = scale
+        self.inverse = inverse
+        self.timeenc = timeenc
+        self.freq = freq
+        
+        self.root_path = root_path
+        self.data_path = data_path
+        self.__read_data__()
+
+    def __read_data__(self):
+        self.scaler = StandardScaler()
+        df_raw = pd.read_csv(os.path.join(self.root_path,
+                                          self.data_path))
+
+        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
+        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1 = border1s[self.set_type]
+        border2 = border2s[self.set_type]
+        
+        if self.features=='M' or self.features=='MS':
+            cols_data = df_raw.columns[1:]
+            df_data = df_raw[cols_data]
+        elif self.features=='S':
+            df_data = df_raw[[self.target]]
+
+        if self.scale:
+            train_data = df_data[border1s[0]:border2s[0]]
+            self.scaler.fit(train_data.values)
+            data = self.scaler.transform(df_data.values)
+        else:
+            data = df_data.values
+            
+        df_stamp = df_raw[['date']][border1:border2]
+        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        data_stamp = time_features(df_stamp, timeenc=self.timeenc, freq=self.freq)
+
+        self.data_x = data[border1:border2]
+        if self.inverse:
+            self.data_y = df_data.values[border1:border2]
+        else:
+            self.data_y = data[border1:border2]
+        self.data_stamp = data_stamp
+    
+    def __getitem__(self, index):
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        r_begin = s_end - self.label_len 
+        r_end = r_begin + self.label_len + self.pred_len
+
+        seq_x = self.data_x[s_begin:s_end]
+        if self.inverse:
+            seq_y = np.concatenate([self.data_x[r_begin:r_begin+self.label_len], self.data_y[r_begin+self.label_len:r_end]], 0)
+        else:
+            seq_y = self.data_y[r_begin:r_end]
+        seq_x_mark = self.data_stamp[s_begin:s_end]
+        seq_y_mark = self.data_stamp[r_begin:r_end]
+
+        return seq_x, seq_y, seq_x_mark, seq_y_mark
+    
+    def __len__(self):
+        return len(self.data_x) - self.seq_len- self.pred_len + 1
+
+    def inverse_transform(self, data):
+        return self.scaler.inverse_transform(data)
+
 class Dataset_WIND_hour(Dataset):
     '''
     PyTorch dataloader class for the wind dataset, which constitutes a minor amendment of the original Informer dataloader for the ETT hourly.
@@ -336,9 +423,8 @@ class Dataset_WIND_hour(Dataset):
         self.scaler = StandardScaler()
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
-
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         ### If you want to check the actual sequence lengths in the training, validation and test sets
         ### Before the data is turned into windows
         #train_len = border2s[0] - border1s[0]
@@ -442,8 +528,8 @@ class Dataset_SYNTH_hour(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -534,8 +620,8 @@ class Dataset_SYNTH_additive(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -625,8 +711,8 @@ class Dataset_SYNTH_additive_reversal(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -717,8 +803,8 @@ class Dataset_SYNTH_multiplicative(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -808,8 +894,8 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -1565,14 +1651,7 @@ class Exp_Informer(Exp_Basic):
         args = self.args
         # B.A. added arg
         data_dict = {
-            #'ETTh1':Dataset_ETT_hour,
-            #'ETTh2':Dataset_ETT_hour,
-            #'ETTm1':Dataset_ETT_minute,
-            #'ETTm2':Dataset_ETT_minute,
-            #'WTH':Dataset_Custom,
-            #'ECL':Dataset_Custom,
-            #'Solar':Dataset_Custom,
-            #'custom':Dataset_Custom,
+            'ETTh1':Dataset_ETT_hour,
             'SYNTHh1':Dataset_SYNTH_hour,
             'SYNTHh': Dataset_SYNTH_hour,
             'SYNTHh2':Dataset_SYNTH_hour,
@@ -1580,7 +1659,6 @@ class Exp_Informer(Exp_Basic):
             'SYNTH_additive_reversal': Dataset_SYNTH_additive_reversal,
             'SYNTH_multiplicative': Dataset_SYNTH_multiplicative,
             'SYNTH_multiplicative_reversal': Dataset_SYNTH_multiplicative_reversal,
-            'DEWINDh_large': Dataset_WIND_hour,
             'DEWINDh_small': Dataset_WIND_hour
         }
         Data = data_dict[self.args.data]
@@ -1763,7 +1841,7 @@ class Exp_Informer(Exp_Basic):
         print('test shape:', preds.shape, trues.shape)
 
         # Save Results
-        folder_path = './results/' + setting +'/'
+        folder_path = './results/' + setting + '_iter_' + str(self.iter) + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
         # Compute model evaluation metrics
@@ -1774,8 +1852,8 @@ class Exp_Informer(Exp_Basic):
         np.save(folder_path+'pred.npy', preds)
         np.save(folder_path+'true.npy', trues)
         
-        # We added returning predictions and true values per window, as well as overall MSE and MAE scores and the first batch of the test set
-        return preds, trues, mse, mae, all_metrics, first_batch_test
+        # We added returning predictions and true values per window, as well as overall MSE, MAE, and MAPE scores and the first batch of the test set
+        return preds, trues, mse, mae, mape, all_metrics, first_batch_test
     # Method deactivated as it is currently not supported
     #def predict(self, setting, load=False):
         #pred_data, pred_loader = self._get_data(flag='pred')
@@ -1866,10 +1944,9 @@ class InformerTS():
         # Target name fixed at 'TARGET' for the moment   
         self.args.target = 'TARGET' # target feature in S or MS task
         self.args.freq = 'h' # freq for time features encoding, options:[s:secondly, t:minutely, h:hourly, d:daily, b:business days, w:weekly, m:monthly], you can also use more detailed freq like 15min or 3h
-        self.args.checkpoints = './informer_checkpoints' # location of model checkpoints
+        self.args.checkpoints = './checkpoints' # location of model checkpoints
 
-        # Input sequence length fixed at 96 for the moment: Both Informer and Autoformer experiment with 96
-        self.args.seq_len = 96 # input sequence length of Informer encoder
+        self.args.seq_len = 168 # input sequence length of Informer encoder
         # Decoder start token index fixed at 48 for the same reason
         self.args.label_len = 48 # start token length of Informer decoder
         # Architecture specifics
@@ -1897,7 +1974,7 @@ class InformerTS():
         self.args.use_amp = False # whether to use automatic mixed precision training
 
         self.args.num_workers = 0
-        self.args.itr = 1
+        self.args.itr = 3
         self.args.des = 'exp'
 
         self.args.use_gpu = True if torch.cuda.is_available() else False
@@ -1911,14 +1988,13 @@ class InformerTS():
         # Initialize data parser
         # Unsupported datasets are commented out
         self.data_parser = {
-            #'ETTh1':{'data':'ETTh1.csv','T':'OT','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]},
-            #'ETTh2':{'data':'ETTh2.csv','T':'OT','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]},
-            #'ETTm1':{'data':'ETTm1.csv','T':'OT','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]},
-            #'ETTm2':{'data':'ETTm2.csv','T':'OT','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]},
-            'SYNTHh1':{'data':'SYNTHh1.csv','T':'TARGET','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]}, ## our new dataset
-            'SYNTHh2':{'data':'SYNTHh2.csv','T':'TARGET','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]}, ## our new dataset
-            'DEWINDh_large':{'data':'DEWINDh_large.csv','T':'TARGET','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]}, ## our new dataset
-            'DEWINDh_small':{'data':'DEWINDh_small.csv','T':'TARGET','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]}, ## our new dataset
+            'ETTh1':{'data':'ETTh1.csv','T':'OT','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]},
+            'SYNTHh1':{'data':'SYNTHh1.csv','T':'TARGET','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]},
+            'SYNTH_additive':{'data':'SYNTH_additive.csv','T':'TARGET','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]},
+            'SYNTH_additive_reversal':{'data':'SYNTH_additive_reversal.csv','T':'TARGET','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]},
+            'SYNTH_multiplicative':{'data':'SYNTH_multiplicative.csv','T':'TARGET','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]},
+            'SYNTH_multiplicative_reversal':{'data':'SYNTH_multiplicative_reversal.csv','T':'TARGET','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]},
+            'DEWINDh_small':{'data':'DEWINDh_small.csv','T':'TARGET','M':[7,7,7],'S':[1,1,1],'MS':[7,7,1]}
         }
 
     def compile(self, learning_rate=1e-4, loss='mse', early_stopping_patience=3):
@@ -1935,7 +2011,8 @@ class InformerTS():
         self.args.loss = loss
         self.args.patience = early_stopping_patience
 
-    def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=8, pred_len=24):
+    def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=8, pred_len=24, 
+            seq_len = 168 , features = 'S'):
         '''
         Fits the informer model.
         Args:
@@ -1946,9 +2023,9 @@ class InformerTS():
             pred_len (int): Prediction window length. Default: 24. Recommended: 24, 168, 720.
         '''
         # temporary line
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal', 'DEWINDh_large', 'DEWINDh_small', 'SYNTHh']
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal', 'DEWINDh_large', 'DEWINDh_small', 'ETTh1']
         if data not in possible_datasets:
-            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', 'SYNTH_additive', 'SYNTH_additive_reversal', 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal', 'DEWINDh_large', 'DEWINDh_small'.")
+            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', 'SYNTH_additive', 'SYNTH_additive_reversal', 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal', 'DEWINDh_large', 'DEWINDh_small', 'ETTh1'.")
         # temporary line
         possible_predlens = [24, 48, 96, 168, 336, 720]
         if pred_len not in possible_predlens:
@@ -1959,6 +2036,8 @@ class InformerTS():
         self.args.train_epochs = epochs
         self.args.batch_size = batch_size
         self.args.pred_len = pred_len
+        self.args.seq_len = seq_len
+        self.args.features = features      
 
         # Set up data parser:
         if self.args.data in self.data_parser.keys():
@@ -1978,7 +2057,7 @@ class InformerTS():
         # Set up training settings
         self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_at{}_fc{}_eb{}_dt{}_mx{}_{}_{}'.format(self.args.model, self.args.data, self.args.features, 
                 self.args.seq_len, self.args.label_len, self.args.pred_len,
-                self.args.d_model, self.args.n_heads, self.args.s_layers, self.args.d_layers, self.args.d_ff, self.args.attn, self.args.factor, self.args.embed, self.args.distil, self.args.mix, self.args.des, 1)
+                self.args.d_model, self.args.n_heads, self.args.s_layers, self.args.d_layers, self.args.d_ff, self.args.attn, self.args.factor, self.args.embed, self.args.distil, self.args.mix, self.args.des, self.iter)
         # Initialize Model Class
         self.experiment_model = Experiment_Model(self.args)
         # Train
@@ -1993,7 +2072,7 @@ class InformerTS():
             As self variables, trues, mse, mae, all_metrics, and first_batch_test can also be called. 
         '''
         # Predict
-        self.preds, self.trues, self.mse, self.mae, self.all_metrics, self.first_batch_test = self.experiment_model.test(self.setting)
+        self.preds, self.trues, self.mse, self.mae, self.mape, self.all_metrics, self.first_batch_test = self.experiment_model.test(self.setting)
         # Clear memory
         torch.cuda.empty_cache()
         return self.preds

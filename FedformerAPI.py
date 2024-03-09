@@ -287,7 +287,94 @@ def time_features(dates, freq='h'):
 
 ###########################################################################################################################
 # Data loaders #################################################################################################
-## !!!Here we have a difference!!! - option for timeenc 0 or 1 in dataset classes unlike in time_features function as in Informer. Should  be simple to modify.
+
+class Dataset_ETT_hour(Dataset):
+    def __init__(self, root_path, flag='train', size=None,
+                 features='M', data_path='ETTh1.csv',
+                 target='OT', scale=True, timeenc=0, freq='h'):
+        # size [seq_len, label_len, pred_len]
+        # info
+        if size == None:
+            self.seq_len = 24 * 4 * 4
+            self.label_len = 24 * 4
+            self.pred_len = 24 * 4
+        else:
+            self.seq_len = size[0]
+            self.label_len = size[1]
+            self.pred_len = size[2]
+        # init
+        assert flag in ['train', 'test', 'val']
+        type_map = {'train': 0, 'val': 1, 'test': 2}
+        self.set_type = type_map[flag]
+
+        self.features = features
+        self.target = target
+        self.scale = scale
+        self.timeenc = timeenc
+        self.freq = freq
+
+        self.root_path = root_path
+        self.data_path = data_path
+        self.__read_data__()
+
+    def __read_data__(self):
+        self.scaler = StandardScaler()
+        df_raw = pd.read_csv(os.path.join(self.root_path,
+                                          self.data_path))
+
+        border1s = [0, 12 * 30 * 24 - self.seq_len, 12 * 30 * 24 + 4 * 30 * 24 - self.seq_len]
+        border2s = [12 * 30 * 24, 12 * 30 * 24 + 4 * 30 * 24, 12 * 30 * 24 + 8 * 30 * 24]
+        border1 = border1s[self.set_type]
+        border2 = border2s[self.set_type]
+
+        if self.features == 'M' or self.features == 'MS':
+            cols_data = df_raw.columns[1:]
+            df_data = df_raw[cols_data]
+        elif self.features == 'S':
+            df_data = df_raw[[self.target]]
+
+        if self.scale:
+            train_data = df_data[border1s[0]:border2s[0]]
+            self.scaler.fit(train_data.values)
+            data = self.scaler.transform(df_data.values)
+        else:
+            data = df_data.values
+
+        df_stamp = df_raw[['date']][border1:border2]
+        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        if self.timeenc == 0:
+            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
+            data_stamp = df_stamp.drop(['date'], 1).values
+        elif self.timeenc == 1:
+            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = data_stamp.transpose(1, 0)
+
+        self.data_x = data[border1:border2]
+        self.data_y = data[border1:border2]
+        self.data_stamp = data_stamp
+
+    def __getitem__(self, index):
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        r_begin = s_end - self.label_len
+        r_end = r_begin + self.label_len + self.pred_len
+
+        seq_x = self.data_x[s_begin:s_end]
+        seq_y = self.data_y[r_begin:r_end]
+        seq_x_mark = self.data_stamp[s_begin:s_end]
+        seq_y_mark = self.data_stamp[r_begin:r_end]
+
+        return seq_x, seq_y, seq_x_mark, seq_y_mark
+
+    def __len__(self):
+        return len(self.data_x) - self.seq_len - self.pred_len + 1
+
+    def inverse_transform(self, data):
+        return self.scaler.inverse_transform(data)
+
 class Dataset_WIND_hour(Dataset):
     '''
     PyTorch dataloader class for the wind dataset, which constitutes a minor amendment of the original Fedformer dataloader for the ETT hourly.
@@ -327,8 +414,8 @@ class Dataset_WIND_hour(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -417,8 +504,8 @@ class Dataset_SYNTH_hour(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -505,8 +592,8 @@ class Dataset_SYNTH_additive(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -593,8 +680,8 @@ class Dataset_SYNTH_additive_reversal(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -681,8 +768,8 @@ class Dataset_SYNTH_multiplicative(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -769,8 +856,8 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -831,7 +918,8 @@ data_dict = {
     'SYNTH_multiplicative': Dataset_SYNTH_multiplicative,
     'SYNTH_multiplicative_reversal': Dataset_SYNTH_multiplicative_reversal,
     'DEWINDh_large': Dataset_WIND_hour,
-    'DEWINDh_small': Dataset_WIND_hour
+    'DEWINDh_small': Dataset_WIND_hour,
+    'ETTh1': Dataset_ETT_hour
 }
 
 def data_provider(args, flag):
@@ -2714,7 +2802,7 @@ class Exp_Fedformer(Exp_Basic):
         print('test shape:', preds.shape, trues.shape)
 
         # result save
-        folder_path = './results/' + setting + '/'
+        folder_path = './results/' + setting + '_iter_' + str(self.iter) + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
@@ -2734,7 +2822,7 @@ class Exp_Fedformer(Exp_Basic):
 
         # Added returned variables - predictions and true values per window, as well as overall MSE and MAE scores 
         # and the first batch of the test set
-        return preds , trues ,mae, mse , all_metrics, first_batch
+        return preds , trues ,mae, mape, mse , all_metrics, first_batch
 
     #Commented as this function is not used in our work
    # def predict(self, setting, load=False):
@@ -2823,7 +2911,7 @@ class FedformerTS():
         self.args.freq = 'h'
         self.args.detail_freq = 'h' #like freq, but use in predict
         # Lengths
-        self.args.seq_len = 96
+        self.args.seq_len = 168
         self.args.label_len = 48
         self.args.pred_len = 24
         # Model 
@@ -2842,10 +2930,10 @@ class FedformerTS():
         self.args.embed = 'timeF'
         self.args.activation = 'gelu'
         self.args.output_attention = False
-        self.args.model_id= self.args.model + '_' + self.args.data + '_' + self.args.pred_len
+        self.args.model_id= self.args.model + '_' + self.args.data + '_' + str(self.args.pred_len)
         # Optimization
         self.args.num_workers = 10
-        self.args.itr = 1
+        self.args.itr = 3
         self.args.train_epochs = 10 # epoch size is 10 as in the paper 
         self.args.batch_size = 32 # batch size 32 as in the paper
         self.args.patience= 3
@@ -2883,7 +2971,8 @@ class FedformerTS():
         self.args.loss = loss
         self.args.patience = early_stopping_patience
 
-    def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=8, pred_len=24):
+    def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=8, pred_len=24,
+            seq_len = 168 , features = 'S' , target = 'TARGET' , enc_in = 1, dec_in = 1, c_out = 1):
         '''
         Fits the Fedformer model.
         Args:
@@ -2894,9 +2983,9 @@ class FedformerTS():
             pred_len (int): Prediction window length. Default: 24. Recommended: 24, 48, 168, 336, 720.
         '''
         # temporary line
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_multiplicative', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small']
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_multiplicative', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' , 'ETTh1']
         if data not in possible_datasets:
-            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', 'SYNTH_additive', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal', 'DEWINDh_large', 'DEWINDh_small'.")
+            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', 'SYNTH_additive', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal', 'DEWINDh_large', 'DEWINDh_small', 'ETTh1'.")
         # temporary line
         possible_predlens = [24, 48, 168, 336, 720]
         if pred_len not in possible_predlens:
@@ -2906,7 +2995,13 @@ class FedformerTS():
         self.args.data_path = f'{self.args.data}.csv'
         self.args.train_epochs = epochs
         self.args.batch_size = batch_size
+        self.args.seq_len = seq_len
         self.args.pred_len = pred_len
+        self.args.features = features
+        self.args.target = target
+        self.args.enc_in = enc_in
+        self.args.dec_in = dec_in
+        self.args.c_out = c_out
         
        #self.args.detail_freq = self.args.freq
        #self.args.freq = self.args.freq[-1:]
@@ -2917,9 +3012,9 @@ class FedformerTS():
         # Set up model variable
         Experiment_Model = Exp_Fedformer
         # Set up training settings
-        self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_at{}_fc{}_eb{}_dt{}_mx{}_{}_{}'.format(self.args.model, self.args.data, self.args.features, 
-                self.args.seq_len, self.args.label_len, self.args.pred_len,
-                self.args.d_model, self.args.n_heads,  self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, 1)
+        self.setting = '{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(self.args.task_id,
+        self.args.model, self.args.data,  self.args.features, self.args.seq_len, self.args.label_len, self.args.pred_len, self.args.d_model,
+        self.args.n_heads, self.args.e_layers, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, self.iter)                                                                                       
         # Initialize Model Class
         self.experiment_model = Experiment_Model(self.args)
         # Train
@@ -2936,7 +3031,7 @@ class FedformerTS():
         #if not self.model:
             #raise ValueError('No model trained. Make sure to run .fit() first.')
         # Predict
-        self.preds, self.trues, self.mse, self.mae, self.all_metrics, self.first_batch_test = self.experiment_model.test(self.setting)
+        self.preds, self.trues, self.mse, self.mae, self.mape, self.all_metrics, self.first_batch_test = self.experiment_model.test(self.setting)
         # Clear memory
         torch.cuda.empty_cache()
         return self.preds
