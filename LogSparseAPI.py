@@ -1936,9 +1936,9 @@ class Exp_Logsparse(Exp_Basic):
         station_ids = []
         if save_flag:
             if len(save_dir) == 0:
-                folder_path = './results/' + setting + '_iter_' + str(self.iter) + '/'
+                folder_path = './results/' + setting + '/'
             else:
-                folder_path = save_dir + 'results/' + setting + '_iter_' + str(self.iter) +'/'
+                folder_path = save_dir + 'results/' + setting + '/'
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
@@ -2108,7 +2108,7 @@ class LogsparseTS():
         self.args.checkpoint_flag = 1
         # forecasting task
         self.args.features = 'S' #univariate
-        self.args.seq_len = 168
+        self.args.seq_len = 768
         self.args.label_len = 48
         self.args.pred_len = 24
         self.args.enc_in = 1
@@ -2216,7 +2216,7 @@ class LogsparseTS():
         # Set up model variable
         Experiment_Model = Exp_Logsparse
         # Set up training settings
-        self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_dl{}_df{}_fc{}_eb{}_dt{}_{}'.format(self.args.model, self.args.data, self.args.features, 
+        self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_dl{}_df{}_fc{}_eb{}_dt{}_iter{}'.format(self.args.model, self.args.data, self.args.features, 
                 self.args.seq_len, self.args.label_len, self.args.pred_len,
                 self.args.d_model, self.args.n_heads, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, self.iter)
         # Initialize Model Class

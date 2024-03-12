@@ -1841,7 +1841,7 @@ class Exp_Informer(Exp_Basic):
         print('test shape:', preds.shape, trues.shape)
 
         # Save Results
-        folder_path = './results/' + setting + '_iter_' + str(self.iter) + '/'
+        folder_path = './results/' + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
         # Compute model evaluation metrics
@@ -1984,6 +1984,11 @@ class InformerTS():
         self.args.devices = '0,1,2,3'
 
         self.args.use_gpu = True if torch.cuda.is_available() and self.args.use_gpu else False
+        if self.args.use_gpu and self.args.use_multi_gpu: 
+            self.args.devices = self.args.devices.replace(' ', '')
+            device_ids = self.args.devices.split(',')
+            self.args.device_ids = [int(id_) for id_ in device_ids]
+            self.args.gpu = self.args.device_ids[0]       
 
         # Initialize data parser
         # Unsupported datasets are commented out
@@ -2055,7 +2060,7 @@ class InformerTS():
         # Set up model variable
         Experiment_Model = Exp_Informer
         # Set up training settings
-        self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_at{}_fc{}_eb{}_dt{}_mx{}_{}_{}'.format(self.args.model, self.args.data, self.args.features, 
+        self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_at{}_fc{}_eb{}_dt{}_mx{}_{}_iter{}'.format(self.args.model, self.args.data, self.args.features, 
                 self.args.seq_len, self.args.label_len, self.args.pred_len,
                 self.args.d_model, self.args.n_heads, self.args.s_layers, self.args.d_layers, self.args.d_ff, self.args.attn, self.args.factor, self.args.embed, self.args.distil, self.args.mix, self.args.des, self.iter)
         # Initialize Model Class

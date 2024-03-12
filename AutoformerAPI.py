@@ -864,6 +864,7 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
 
         border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
         border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
+        border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
         if self.features == 'M' or self.features == 'MS':
@@ -2015,7 +2016,7 @@ class Exp_Autoformer(Exp_Basic):
         print('test shape:', preds.shape, trues.shape)
 
         # result save
-        folder_path = './results/' + setting + '_iter_' + str(self.iter) + '/'
+        folder_path = './results/' + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
         # Compute model evaluation metrics
@@ -2130,7 +2131,6 @@ class AutoformerTS():
         self.args.loss = 'mse'
         self.args.train_epochs = 10 # epoch size is 10 as in the paper   
         self.args.lradj = 'type1'
-        self.args.model_id= self.args.model + '_' + self.args.data + '_' + str(self.args.pred_len)
         # GPU 
         self.args.gpu = 0
         self.args.devices = '0,1,2,3'
@@ -2200,8 +2200,8 @@ class AutoformerTS():
         # Set up model variable
         Experiment_Model = Exp_Autoformer
         # Set up training settings
-        self.setting = '{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(
-        self.args.model_id, self.args.model, self.args.data, self.args.features, self.args.seq_len, self.args.label_len, self.args.pred_len,
+        self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_iter{}'.format(
+        self.args.model, self.args.data, self.args.features, self.args.seq_len, self.args.label_len, self.args.pred_len,
         self.args.d_model, self.args.n_heads, self.args.e_layers, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, self.iter)
         # Initialize Model Class
         self.experiment_model = Experiment_Model(self.args)

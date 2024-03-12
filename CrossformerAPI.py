@@ -1644,7 +1644,7 @@ class Exp_crossformer(Exp_Basic):
         print('test shape:', preds.shape, trues.shape)
 
         # result save
-        folder_path = './results/' + setting + '_iter_' + str(self.iter) + '/'
+        folder_path = './results/' + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
@@ -1839,9 +1839,9 @@ class CrossformerTS():
             pred_len (int): Prediction window length. Default: 24. Recommended: 24, 168, 720.
         '''
         # temporary line
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' , 'ETTh1']
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' ,'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' , 'ETTh1']
         if data not in possible_datasets:
-            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reversal', 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal',  'DEWINDh_large', 'DEWINDh_small' ,'ETTh1'.")
+            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', 'SYNTH_additive', 'SYNTH_additive_reversal', 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal',  'DEWINDh_large', 'DEWINDh_small' ,'ETTh1'.")
         # temporary line
         possible_predlens = [24, 48, 96, 168, 336, 720]
         if pred_len not in possible_predlens:
@@ -1866,7 +1866,7 @@ class CrossformerTS():
         print('='*150)            
 
         Experiment_Model = Exp_crossformer
-        self.setting = 'Crossformer_{}_il{}_pl{}_sl{}_win{}_fa{}_dm{}_nh{}_el{}_itr{}'.format(self.args.data, self.args.seq_len, self.args.pred_len, 
+        self.setting = 'Crossformer_{}_il{}_pl{}_sl{}_win{}_fa{}_dm{}_nh{}_el{}_iter{}'.format(self.args.data, self.args.seq_len, self.args.pred_len, 
                             self.args.seg_len, self.args.win_size, self.args.factor,
                             self.args.d_model, self.args.n_heads, self.args.e_layers, self.iter)
         # Initialize model class

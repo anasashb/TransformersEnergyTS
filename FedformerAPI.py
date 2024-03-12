@@ -2802,7 +2802,7 @@ class Exp_Fedformer(Exp_Basic):
         print('test shape:', preds.shape, trues.shape)
 
         # result save
-        folder_path = './results/' + setting + '_iter_' + str(self.iter) + '/'
+        folder_path = './results/' + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
@@ -3012,7 +3012,7 @@ class FedformerTS():
         # Set up model variable
         Experiment_Model = Exp_Fedformer
         # Set up training settings
-        self.setting = '{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_{}'.format(self.args.task_id,
+        self.setting = '{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_iter{}'.format(self.args.task_id,
         self.args.model, self.args.data,  self.args.features, self.args.seq_len, self.args.label_len, self.args.pred_len, self.args.d_model,
         self.args.n_heads, self.args.e_layers, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, self.iter)                                                                                       
         # Initialize Model Class
