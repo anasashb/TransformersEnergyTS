@@ -734,7 +734,7 @@ class Dataset_SYNTH_additive_reversal(Dataset):
 
      def __read_data__(self):
         self.scaler = StandardScaler()
-        _path = os.path.join(self.root_path, self.flag, self.data_path).replace('\\', '/')  # replace in case windows
+        _path = os.path.join(self.root_path, self.data_path).replace('\\', '/')  # replace in case windows
         df_raw = pd.read_csv(_path)
         
         border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
@@ -831,7 +831,7 @@ class Dataset_SYNTH_multiplicative(Dataset):
 
      def __read_data__(self):
         self.scaler = StandardScaler()
-        _path = os.path.join(self.root_path, self.flag, self.data_path).replace('\\', '/')  # replace in case windows
+        _path = os.path.join(self.root_path, self.data_path).replace('\\', '/')  # replace in case windows
         df_raw = pd.read_csv(_path)
 
         
@@ -929,7 +929,7 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
 
      def __read_data__(self):
         self.scaler = StandardScaler()
-        _path = os.path.join(self.root_path, self.flag, self.data_path).replace('\\', '/')  # replace in case windows
+        _path = os.path.join(self.root_path, self.data_path).replace('\\', '/')  # replace in case windows
         df_raw = pd.read_csv(_path)
         
         border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
