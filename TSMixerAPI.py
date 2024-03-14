@@ -358,6 +358,7 @@ class TSMixer():
         self.args.temporal_dim = 16 ## temporal feature dimension
         self.args.hidden_dim = 64 ## hidden feature dimension
         self.args.num_workers = 0 
+        self.args.itr = 3
 
 
 
