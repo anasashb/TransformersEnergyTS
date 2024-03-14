@@ -2176,7 +2176,7 @@ class LogsparseTS():
         self.args.patience = early_stopping_patience
 
     def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=10, pred_len=24,
-            seq_len = 168 , features = 'S' , target = 'TARGET', enc_in = 1, dec_in = 1, c_out = 1):
+            seq_len = 168 , features = 'S' , target = 'TARGET', enc_in = 1, dec_in = 1, c_out = 1 , iter = 1 ):
         '''
         Fits the Logsparse model.
         Args:
@@ -2206,7 +2206,7 @@ class LogsparseTS():
         self.args.enc_in = enc_in
         self.args.dec_in = dec_in
         self.args.c_out = c_out
-        
+        self.args.iter = iter
        #self.args.detail_freq = self.args.freq
        #self.args.freq = self.args.freq[-1:]
         
@@ -2218,7 +2218,7 @@ class LogsparseTS():
         # Set up training settings
         self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_dl{}_df{}_fc{}_eb{}_dt{}_des{}_iter{}'.format(self.args.model, self.args.data, self.args.features, 
                 self.args.seq_len, self.args.label_len, self.args.pred_len,
-                self.args.d_model, self.args.n_heads, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, self.iter)
+                self.args.d_model, self.args.n_heads, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, self.args.iter)
         # Initialize Model Class
         self.experiment_model = Experiment_Model(self.args)
         # Train
@@ -2235,7 +2235,7 @@ class LogsparseTS():
         #if not self.model:
             #raise ValueError('No model trained. Make sure to run .fit() first.')
         # Predict
-        self.preds, self.trues, self.mse, self.mae, self.losses, self.first_batch_test = self.experiment_model.test(self.setting)
+        self.preds, self.trues, self.mse, self.mae, self.mape, self.losses, self.first_batch_test = self.experiment_model.test(self.setting)
         # Clear memory
         torch.cuda.empty_cache()
         return self.preds
