@@ -100,7 +100,7 @@ def metric(pred, true):
     
     return mae,mse,rmse,mape,mspe
 
-### Commented out as it seems like it is not used in the code.
+### Commented out as is not used in the code.
 #class StandardScaler():
     '''
     Straightforward StandardScaler class.
@@ -278,7 +278,7 @@ def time_features_from_frequency_str(freq_str: str) -> List[TimeFeature]:
 
 ###########################################################################################################################
 # Timestamps ##############################################################################################################
-## !!!Here we have a difference!!!
+
 def time_features(dates, freq='h'):
     """
     > `time_features` takes in a `dates` dataframe with a 'dates' column and extracts the date down to `freq` where freq can be any of the following:
@@ -298,7 +298,7 @@ def time_features(dates, freq='h'):
 
 class Dataset_ETT_hour(Dataset):
     def __init__(self, root_path, flag='train', size=None,
-                 features='S', data_path='ETTh1.csv',
+                 features='M', data_path='ETTh1.csv',
                  target='OT', scale=True, timeenc=0, freq='h'):
         # size [seq_len, label_len, pred_len]
         # info
@@ -422,8 +422,8 @@ class Dataset_WIND_hour(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -512,8 +512,8 @@ class Dataset_SYNTH_hour(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -600,8 +600,8 @@ class Dataset_SYNTH_additive(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -686,9 +686,8 @@ class Dataset_SYNTH_additive_reversal(Dataset):
         self.scaler = StandardScaler()
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
-
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -775,8 +774,8 @@ class Dataset_SYNTH_multiplicative(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -863,8 +862,8 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
 
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
         
@@ -916,8 +915,6 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
 
-## Here we have a difference!!! - In Informer this part is inside the model class
-
 data_dict = {
     'SYNTHh1': Dataset_SYNTH_hour,
     'SYNTHh2': Dataset_SYNTH_hour,
@@ -926,7 +923,8 @@ data_dict = {
     'SYNTH_multiplicative': Dataset_SYNTH_multiplicative,
     'SYNTH_multiplicative_reversal' : Dataset_SYNTH_multiplicative_reversal,
     'DEWINDh_large': Dataset_WIND_hour,
-    'DEWINDh_small': Dataset_WIND_hour
+    'DEWINDh_small': Dataset_WIND_hour,
+    'ETTh1': Dataset_ETT_hour
 }
 
 def data_provider(args, flag):
@@ -1010,7 +1008,6 @@ class Exp_Basic(object):
 ###########################################################################################################################
 ### MODEL COMPONENTS ######################################################################################################
 # Data Embedding ##########################################################################################################
-## !!!Here we have a difference!!! - compared_version function for use in TokenEmbedding class. In Informer they just embed it in the class's code.
 def compared_version(ver1, ver2):
     """
     :param ver1
@@ -1147,7 +1144,7 @@ class DataEmbedding(nn.Module):
         x = self.value_embedding(x) + self.temporal_embedding(x_mark) + self.position_embedding(x)
         return self.dropout(x)
 
-## Here we have a difference!!! - This embedding class doesn't exist in Informer
+
 class DataEmbedding_wo_pos(nn.Module):
     def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
         super(DataEmbedding_wo_pos, self).__init__()
@@ -1329,7 +1326,7 @@ class ReformerLayer(nn.Module):
         return queries, None
     
 # Auto Correlation#########################################################################################################
-### This one is specific to Autoformer
+
 class AutoCorrelation(nn.Module):
     """
     AutoCorrelation Mechanism with the following two phases:
@@ -1488,7 +1485,6 @@ class AutoCorrelationLayer(nn.Module):
 ###########################################################################################################################
 # Encoder-Decoder #########################################################################################################
 
-##These layers are unique to Autoformer
 class my_Layernorm(nn.Module):
     """
     Special designed layernorm for the seasonal part
@@ -2039,7 +2035,7 @@ class Exp_Autoformer(Exp_Basic):
         np.save(folder_path + 'true.npy', trues)
 
         # Added returned variables - predictions and true values per window, as well as overall MSE and MAE scores and the first batch of the test set
-        return preds , trues ,mae, mse , all_metrics, first_batch
+        return preds , trues ,mae, mape, mse , all_metrics, first_batch
 
     #Commented as this function is not used in our work
     #def predict(self, setting, load=False):
@@ -2108,7 +2104,7 @@ class AutoformerTS():
         self.args.model = 'Autoformer'
         self.args.data = 'Synth1'
         self.args.features = 'S' #univariate
-        self.args.seq_len = 96
+        self.args.seq_len = 168
         self.args.label_len = 48
         self.args.pred_len = 24
         self.args.e_layers = 2
@@ -2120,7 +2116,7 @@ class AutoformerTS():
         self.args.c_out = 1
         self.args.d_model = 512
         self.args.des = 'Exp'
-        self.args.itr = 1
+        self.args.itr = 3
         self.args.d_ff = 2048
         self.args.moving_avg = 25
         self.args.factor = 1
@@ -2135,7 +2131,6 @@ class AutoformerTS():
         self.args.loss = 'mse'
         self.args.train_epochs = 10 # epoch size is 10 as in the paper   
         self.args.lradj = 'type1'
-        self.args.model_id= self.args.model + '_' + self.args.data + '_' + self.args.pred_len
         # GPU 
         self.args.gpu = 0
         self.args.devices = '0,1,2,3'
@@ -2164,7 +2159,8 @@ class AutoformerTS():
         self.args.loss = loss
         self.args.patience = early_stopping_patience
 
-    def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=8, pred_len=24):
+    def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=8, pred_len=24 , 
+            seq_len = 168 , features = 'S' , target = 'TARGET', enc_in = 1, dec_in = 1, c_out = 1):
         '''
         Fits the Autoformer model.
         Args:
@@ -2175,9 +2171,9 @@ class AutoformerTS():
             pred_len (int): Prediction window length. Default: 24. Recommended: 24, 48, 168, 336,  720.
         '''
         # temporary line
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_additive_reveral' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small']
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_additive_reveral' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' , 'ETTh1']
         if data not in possible_datasets:
-            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reveral' 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small'.")
+            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reveral' 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small', 'ETTh1'.")
         # temporary line
         possible_predlens = [24, 48, 168, 336, 720]
         if pred_len not in possible_predlens:
@@ -2187,7 +2183,13 @@ class AutoformerTS():
         self.args.data_path = f'{self.args.data}.csv'
         self.args.train_epochs = epochs
         self.args.batch_size = batch_size
+        self.args.seq_len = seq_len
         self.args.pred_len = pred_len
+        self.args.features = features
+        self.args.target = target
+        self.args.enc_in = enc_in
+        self.args.dec_in = dec_in
+        self.args.c_out = c_out
         
        #self.args.detail_freq = self.args.freq
        #self.args.freq = self.args.freq[-1:]
@@ -2198,9 +2200,9 @@ class AutoformerTS():
         # Set up model variable
         Experiment_Model = Exp_Autoformer
         # Set up training settings
-        self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_at{}_fc{}_eb{}_dt{}_mx{}_{}_{}'.format(self.args.model, self.args.data, self.args.features, 
-                self.args.seq_len, self.args.label_len, self.args.pred_len,
-                self.args.d_model, self.args.n_heads,  self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, 1)
+        self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_iter{}'.format(
+        self.args.model, self.args.data, self.args.features, self.args.seq_len, self.args.label_len, self.args.pred_len,
+        self.args.d_model, self.args.n_heads, self.args.e_layers, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, self.iter)
         # Initialize Model Class
         self.experiment_model = Experiment_Model(self.args)
         # Train
@@ -2217,7 +2219,7 @@ class AutoformerTS():
         #if not self.model:
             #raise ValueError('No model trained. Make sure to run .fit() first.')
         # Predict
-        self.preds, self.trues, self.mse, self.mae, self.all_metrics, self.first_batch_test = self.experiment_model.test(self.setting)
+        self.preds, self.trues, self.mse, self.mae, self.mape, self.all_metrics, self.first_batch_test = self.experiment_model.test(self.setting)
         # Clear memory
         torch.cuda.empty_cache()
         return self.preds

@@ -300,6 +300,105 @@ def time_features(dates, freq='h'):
 ###########################################################################################################################
 # Data loaders #################################################################################################
 
+class Dataset_ETT_hour(Dataset):
+    '''
+    PyTorch dataloader class for the wind dataset, which constitutes amendments of the original Logsparse dataloader for the Wind dataset.
+    Class comprehensively handles the train-val-test split, scaling, time-feature encoding. Further included (but unused at this point) method allows for reverse scaling. 
+    '''
+    def __init__(self, root_path, flag='train', size=None, features='M', data_path='ETTh1.csv',
+                 target='OT', scale=True, inverse = False, timeenc=0, freq='h', **_):
+
+        if size == None:
+            self.seq_len = 24*4*4
+            self.label_len = 24*4
+            self.pred_len = 24*4
+        self.seq_len = size[0]          # S (notation used in paper)
+        self.label_len = size[1]        # L
+        self.pred_len = size[2]         # P
+
+        self.total_seq_len = self.seq_len + self.pred_len
+        assert self.label_len <= self.seq_len
+
+        # init
+        assert flag in ['train', 'test', 'val']
+        type_map = {'train': 0, 'val': 1, 'test': 2}
+        self.set_type = type_map[flag]
+        self.flag = flag
+
+        self.features = features
+        self.target = target        
+        self.scale = scale
+        self.timeenc = timeenc
+        self.freq = freq
+
+        self.root_path = root_path
+        self.data_path = data_path
+        self.__read_data__()
+
+    def __read_data__(self):
+        self.scaler = StandardScaler()
+        _path = os.path.join(self.root_path, self.data_path).replace('\\', '/')  # replace in case windows
+        df_raw = pd.read_csv(_path)
+
+        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
+        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1 = border1s[self.set_type]
+        border2 = border2s[self.set_type]
+
+        if self.features == 'M' or self.features == 'MS':
+            cols_data = df_raw.columns[1:]
+            df_data = df_raw[cols_data]
+        elif self.features == 'S':
+            df_data = df_raw[[self.target]]
+        
+        if self.scale:
+            train_data = df_data[border1s[0]:border2s[0]]
+            self.scaler.fit(train_data.values)
+            data = self.scaler.transform(df_data.values)
+        else:
+            data = df_data.values
+
+        # Construct the time array
+        df_stamp = df_raw[['date']][border1:border2]
+        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        if self.timeenc == 0:
+            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
+            df_stamp['minute'] = df_stamp.date.apply(lambda row: row.minute, 1)
+            df_stamp['minute'] = df_stamp.minute.map(lambda x: x // 10)
+            data_stamp = df_stamp.drop(['time'], 1).values
+        elif self.timeenc == 1:
+            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = data_stamp.transpose(1, 0)
+        else:
+            raise ValueError("Pass timeenc as either 0 or 1")
+
+        self.data_stamp = data_stamp    # The full time dataset
+        self.data_x = data[border1:border2]
+        self.data_y = data[border1:border2]
+
+    def __getitem__(self, index):
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        r_begin = s_end - self.label_len
+        r_end = r_begin + self.label_len + self.pred_len
+
+        seq_x = self.data_x[s_begin:s_end]
+        seq_y = self.data_y[r_begin:r_end]
+        seq_x_mark = self.data_stamp[s_begin:s_end]
+        seq_y_mark = self.data_stamp[r_begin:r_end]
+
+        return seq_x, seq_y, seq_x_mark, seq_y_mark
+
+    def __len__(self):
+        return len(self.data_x) - self.seq_len - self.pred_len + 1
+
+        # Assumes inputs of shape [nodes, seq, feats] or [seq, feats]
+    def inverse_transform(self, data):
+        return self.scaler.inverse_transform(data)
+
 class Dataset_WIND_hour(Dataset):
     '''
     PyTorch dataloader class for the wind dataset, which constitutes amendments of the original Logsparse dataloader for the Wind dataset.
@@ -337,16 +436,11 @@ class Dataset_WIND_hour(Dataset):
 
     def __read_data__(self):
         self.scaler = StandardScaler()
-        _path = os.path.join(self.root_path, self.flag, self.data_path).replace('\\', '/')  # replace in case windows
+        _path = os.path.join(self.root_path, self.data_path).replace('\\', '/')  # replace in case windows
         df_raw = pd.read_csv(_path)
 
-        # Fit scaler based on training data only
-        if self.flag != 'train':
-            train_data = pd.read_csv(_path.replace(self.flag, 'train'))
-
-        
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
@@ -443,12 +537,9 @@ class Dataset_SYNTH_hour(Dataset):
         df_raw = pd.read_csv(_path)
 
         # Fit scaler based on training data only
-        if self.flag != 'train':
-            train_data = pd.read_csv(_path.replace(self.flag, 'train'))
-
         
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
@@ -541,7 +632,7 @@ class Dataset_SYNTH_additive(Dataset):
 
      def __read_data__(self):
         self.scaler = StandardScaler()
-        _path = os.path.join(self.root_path, self.flag, self.data_path).replace('\\', '/')  # replace in case windows
+        _path = os.path.join(self.root_path, self.data_path).replace('\\', '/')  # replace in case windows
         df_raw = pd.read_csv(_path)
 
         # Fit scaler based on training data only
@@ -549,8 +640,8 @@ class Dataset_SYNTH_additive(Dataset):
             train_data = pd.read_csv(_path.replace(self.flag, 'train'))
 
         
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
@@ -643,16 +734,11 @@ class Dataset_SYNTH_additive_reversal(Dataset):
 
      def __read_data__(self):
         self.scaler = StandardScaler()
-        _path = os.path.join(self.root_path, self.flag, self.data_path).replace('\\', '/')  # replace in case windows
+        _path = os.path.join(self.root_path, self.data_path).replace('\\', '/')  # replace in case windows
         df_raw = pd.read_csv(_path)
-
-        # Fit scaler based on training data only
-        if self.flag != 'train':
-            train_data = pd.read_csv(_path.replace(self.flag, 'train'))
-
         
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
@@ -745,16 +831,12 @@ class Dataset_SYNTH_multiplicative(Dataset):
 
      def __read_data__(self):
         self.scaler = StandardScaler()
-        _path = os.path.join(self.root_path, self.flag, self.data_path).replace('\\', '/')  # replace in case windows
+        _path = os.path.join(self.root_path, self.data_path).replace('\\', '/')  # replace in case windows
         df_raw = pd.read_csv(_path)
 
-        # Fit scaler based on training data only
-        if self.flag != 'train':
-            train_data = pd.read_csv(_path.replace(self.flag, 'train'))
-
         
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
@@ -847,16 +929,11 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
 
      def __read_data__(self):
         self.scaler = StandardScaler()
-        _path = os.path.join(self.root_path, self.flag, self.data_path).replace('\\', '/')  # replace in case windows
+        _path = os.path.join(self.root_path, self.data_path).replace('\\', '/')  # replace in case windows
         df_raw = pd.read_csv(_path)
-
-        # Fit scaler based on training data only
-        if self.flag != 'train':
-            train_data = pd.read_csv(_path.replace(self.flag, 'train'))
-
         
-        border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-        border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
+        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
@@ -917,6 +994,7 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
         return self.scaler.inverse_transform(data)    
      
 data_dict = {
+    'ETTh1': Dataset_ETT_hour,
     'SYNTHh1': Dataset_SYNTH_hour,
     'SYNTHh2': Dataset_SYNTH_hour,
     'SYNTH_additive': Dataset_SYNTH_additive,
@@ -1858,9 +1936,9 @@ class Exp_Logsparse(Exp_Basic):
         station_ids = []
         if save_flag:
             if len(save_dir) == 0:
-                folder_path = './test_results/' + setting + '/'
+                folder_path = './results/' + setting + '/'
             else:
-                folder_path = save_dir + 'test_results/' + setting + '/'
+                folder_path = save_dir + 'results/' + setting + '/'
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
@@ -1945,11 +2023,11 @@ class Exp_Logsparse(Exp_Basic):
 
         mae, mse, rmse, mape, mspe = metric(preds, trues)
 
-        preds_un = test_data.inverse_transform(preds)
-        trues_un = test_data.inverse_transform(trues)
-        mae_un, mse_un, rmse_un, mape_un, mspe_un = metric(preds_un, trues_un)
-
-        losses = {
+        if self.args.inverse:
+            preds_un = test_data.inverse_transform(preds)
+            trues_un = test_data.inverse_transform(trues)
+            mae_un, mse_un, rmse_un, mape_un, mspe_un = metric(preds_un, trues_un)
+            losses = {
             'mae_sc': mae,
             'mse_sc': mse,
             'rmse_sc': rmse,
@@ -1958,10 +2036,20 @@ class Exp_Logsparse(Exp_Basic):
             '': '\n\n',
             'mae_un': mae_un,
             'mse_un': mse_un,
+            'mape_un': mape_un,
             'rmse_un': rmse_un,
             'mape_un': mape_un,
             'mspe_un': mspe_un,
-        }
+            }
+        else:
+            losses = {
+            'mae_sc': mae,
+            'mse_sc': mse,
+            'mape_sc': mape,
+            'rmse_sc': rmse,
+            'mape_sc': mape,
+            'mspe_sc': mspe,
+            }
 
         if not save_flag:
             return losses
@@ -1975,9 +2063,11 @@ class Exp_Logsparse(Exp_Basic):
         np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
         np.save(folder_path + 'pred.npy', preds)
         np.save(folder_path + 'true.npy', trues)
-        np.save(folder_path + 'pred_un.npy', preds_un)
-        np.save(folder_path + 'true_un.npy', trues_un)
-        np.save(folder_path + 'metrics_un.npy', np.array([mae_un, mse_un, rmse_un, mape_un, mspe_un]))
+
+        if self.args.inverse:
+            np.save(folder_path + 'pred_un.npy', preds_un)
+            np.save(folder_path + 'true_un.npy', trues_un)
+            np.save(folder_path + 'metrics_un.npy', np.array([mae_un, mse_un, rmse_un, mape_un, mspe_un]))
 
         with open(folder_path + 'metrics.txt', 'w') as f:
             f.write('mse: ' + str(mse) + '\n')
@@ -1986,7 +2076,7 @@ class Exp_Logsparse(Exp_Basic):
             f.write('mape: ' + str(mape) + '\n')
             f.write('mspe: ' + str(mspe) + '\n')
 
-        return preds , trues ,mae , mse , losses, first_batch
+        return preds , trues ,mae ,mape, mse , losses, first_batch
     
 ###########################################################################################################################
 # Our Simple User Interface ###############################################################################################
@@ -2006,7 +2096,8 @@ class LogsparseTS():
         self.args.model = model
         self.args.plot_flat = 0
         self.args.verbose = 1
-        self.args.is_trainging = 1
+        self.args.is_training = 1
+        self.args.inverse = False
         # data loader
         self.args.data = 'Synth1'
         self.args.root_path = './SYNTHDataset'
@@ -2017,7 +2108,7 @@ class LogsparseTS():
         self.args.checkpoint_flag = 1
         # forecasting task
         self.args.features = 'S' #univariate
-        self.args.seq_len = 96
+        self.args.seq_len = 768
         self.args.label_len = 48
         self.args.pred_len = 24
         self.args.enc_in = 1
@@ -2046,7 +2137,7 @@ class LogsparseTS():
         self.args.model_id= self.args.model + '_' + str(self.args.data) + '_' + str(self.args.pred_len)
         # Optimization
         self.args.num_workers = 0
-        self.args.itr = 1
+        self.args.itr = 3
         self.args.train_epochs = 10
         self.args.batch_size = 32
         self.args.patience= 5
@@ -2084,7 +2175,8 @@ class LogsparseTS():
         self.args.loss = loss
         self.args.patience = early_stopping_patience
 
-    def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=10, pred_len=24):
+    def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=10, pred_len=24,
+            seq_len = 168 , features = 'S' , target = 'TARGET', enc_in = 1, dec_in = 1, c_out = 1 , iter = 1 ):
         '''
         Fits the Logsparse model.
         Args:
@@ -2095,20 +2187,26 @@ class LogsparseTS():
             pred_len (int): Prediction window length. Default: 24. Recommended: 24, 48, 168, 336, 720.
         '''
         # temporary line
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_additive_reveral' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small']
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_additive_reveral' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' , 'ETTh1']
         if data not in possible_datasets:
-            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reveral' 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small'.")
+            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reveral' 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' ,'ETTh1'.")
         # temporary line
         possible_predlens = [24, 48, 168, 336, 720]
-        if pred_len not in possible_predlens:
-            raise ValueError('Prediction length outside current experiment scope. Please use either 24, 48, 168, 336, 720.')
+        #if pred_len not in possible_predlens:
+            #raise ValueError('Prediction length outside current experiment scope. Please use either 24, 48, 168, 336, 720.')
         self.args.data = data
         self.args.root_path = data_root_path
         self.args.data_path = f'{self.args.data}.csv'
         self.args.train_epochs = epochs
         self.args.batch_size = batch_size
+        self.args.seq_len = seq_len
         self.args.pred_len = pred_len
-        
+        self.args.features = features
+        self.args.target = target
+        self.args.enc_in = enc_in
+        self.args.dec_in = dec_in
+        self.args.c_out = c_out
+        self.args.iter = iter
        #self.args.detail_freq = self.args.freq
        #self.args.freq = self.args.freq[-1:]
         
@@ -2118,9 +2216,9 @@ class LogsparseTS():
         # Set up model variable
         Experiment_Model = Exp_Logsparse
         # Set up training settings
-        self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_dl{}_df{}_fc{}_eb{}_dt{}_{}'.format(self.args.model, self.args.data, self.args.features, 
+        self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_dl{}_df{}_fc{}_eb{}_dt{}_des{}_iter{}'.format(self.args.model, self.args.data, self.args.features, 
                 self.args.seq_len, self.args.label_len, self.args.pred_len,
-                self.args.d_model, self.args.n_heads, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, 1)
+                self.args.d_model, self.args.n_heads, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, self.args.iter)
         # Initialize Model Class
         self.experiment_model = Experiment_Model(self.args)
         # Train
@@ -2137,7 +2235,7 @@ class LogsparseTS():
         #if not self.model:
             #raise ValueError('No model trained. Make sure to run .fit() first.')
         # Predict
-        self.preds, self.trues, self.mse, self.mae, self.losses, self.first_batch_test = self.experiment_model.test(self.setting)
+        self.preds, self.trues, self.mse, self.mae, self.mape, self.losses, self.first_batch_test = self.experiment_model.test(self.setting)
         # Clear memory
         torch.cuda.empty_cache()
         return self.preds

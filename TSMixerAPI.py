@@ -135,13 +135,13 @@ class TSFDataLoader:
             test_end = val_end + 4 * 30 * 24
         # I added two more elifs for synth and wind data, we can do the split provision here too
         elif self.data_path.startswith('SYNTHh'):
-            train_end = 12 * 30 * 24
-            val_end = train_end + 4 * 30 * 24
-            test_end = val_end + 4 * 30 * 24
+            train_end = 18 * 30 * 24
+            val_end = train_end + 3 * 30 * 24
+            test_end = val_end + 3 * 30 * 24
         elif self.data_path.startswith('DEWINDh'):
-            train_end = 12 * 30 * 24
-            val_end = train_end + 4 * 30 * 24
-            test_end = val_end + 4 * 30 * 24
+            train_end = 18 * 30 * 24
+            val_end = train_end + 3 * 30 * 24
+            test_end = val_end + 3 * 30 * 24
         else: # results to the good old train-val-test split by ratios
             train_end = int(n * 0.7)
             val_end = n - int(n * 0.2)
@@ -331,7 +331,7 @@ class TSMixer():
     def __init__(self, model='tsmixer_rev_in'):
         self.args = dotdict()
         self.args.model = model ## I keep these redundant model args to maybe then combine all API-s
-        self.args.seed = 0
+        self.args.seed = 100
         
         ## Variables for Multivariate ##################################################################
         ## TODO ## 
@@ -342,11 +342,11 @@ class TSMixer():
         ################################################################################################
         
         
-        self.args.checkpoints = './tsmixer_checkpoints'
+        self.args.checkpoints = './checkpoints'
         self.args.delete_checkpoint = False ## I am not sure this is correct default
 
         ## Variables for TS
-        self.args.seq_len = 96 # used the default of other models, authors set it to 336
+        self.args.seq_len = 168 # used the default of other models, authors set it to 336
 
         # Model Architecture
         #self.kernel_size = 4 ## deactivated because we do not fit CNN
@@ -357,7 +357,8 @@ class TSMixer():
         self.args.activation = 'relu' ## Authors included possible alternative -- 'gelu'
         self.args.temporal_dim = 16 ## temporal feature dimension
         self.args.hidden_dim = 64 ## hidden feature dimension
-        self.args.num_workers = 19 ## maybe switch this to 0 like other models if there is a problem
+        self.args.num_workers = 0 
+        self.args.itr = 3
 
 
 
@@ -376,7 +377,8 @@ class TSMixer():
         self.args.patience = early_stopping_patience
 
     
-    def fit(self, data='SYNTHh', data_root_path='./SynthDataset/', batch_size=32, epochs=100, pred_len=24):
+    def fit(self, data='SYNTHh', data_root_path='./SynthDataset/', batch_size=32, epochs=100, pred_len=24 , 
+            seq_len = 168 , features = 'S' , target = 'TARGET' , iter = 1):
         ## Should include
         ## data, data_root_path, batch_size, epochs, pred_len
         possible_predlens = [24, 48, 96, 168, 336, 720]
@@ -388,12 +390,17 @@ class TSMixer():
         self.args.pred_len = pred_len
         self.args.batch_size = batch_size ## 32 is the authors' default
         self.args.train_epochs = epochs ## 100 is the authors' default
+        self.args.seq_len = seq_len
+        self.args.iter = iter
+        self.args.features = features
+        self.args.target = target
+        self.args.iter = iter
 
         print('Beginning to fit the model with the following arguments:')
         print(f'{self.args}')
         print('='*150)  
 
-        self.setting = f'TSMixer_{self.args.data}_{self.args.features}_sl{self.args.seq_len}_pl{self.args.pred_len}_lr{self.args.learning_rate}_nt{self.args.norm_type}_{self.args.activation}_nb{self.args.n_block}_dp{self.args.dropout}_fd{self.args.ff_dim}'
+        self.setting = f'TSMixer_{self.args.data}_{self.args.features}_sl{self.args.seq_len}_pl{self.args.pred_len}_lr{self.args.learning_rate}_nt{self.args.norm_type}_{self.args.activation}_nb{self.args.n_block}_dp{self.args.dropout}_fd{self.args.ff_dim}_iter{self.args.iter}'
         
         tf.keras.utils.set_random_seed(self.args.seed)
         

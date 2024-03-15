@@ -163,7 +163,7 @@ class PyraformerTSS():
         """ train or evaluate the model """
         model_save_dir = 'models/LongRange/{}/{}/'.format(self.data, self.predict_step)
         os.makedirs(model_save_dir, exist_ok=True)
-        model_save_dir += 'best_iter.pth'
+        self.model_save_dir += 'best_iter.pth'
         if self.eval:
             best_metrics = evaluate(self.model, self, model_save_dir,1)
         else:

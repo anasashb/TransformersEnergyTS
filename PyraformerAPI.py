@@ -1201,6 +1201,7 @@ class GraphMM(torch.autograd.Function):
     @staticmethod
     def _load_compiled_function(dtype: str, device: str):
         # from tvm.module import load  # this can be the small runtime python library, and doesn't need to be the whole thing
+        import tvm
         from tvm.runtime.module import load_module as load
 
         filename = GraphMM._get_lib_filename(dtype, device)
@@ -1354,6 +1355,7 @@ class GraphMM(torch.autograd.Function):
 
 
 graph_mm = GraphMM.apply
+graph_mm_tvm = graph_mm
 
 class PyramidalAttention(nn.Module):
     def __init__(self, n_head, d_model, d_k, d_v, dropout, normalize_before, q_k_mask, k_q_mask):
@@ -1573,11 +1575,10 @@ def get_k_q(q_k_mask):
 class EncoderLayer(nn.Module):
     """ Compose with two layers """
 
-    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.1, normalize_before=True, use_tvm=False, q_k_mask=None, k_q_mask=None):
+    def __init__(self, d_model, d_inner, n_head, d_k, d_v, dropout=0.1, normalize_before=True, use_tvm=True, q_k_mask=None, k_q_mask=None):
         super(EncoderLayer, self).__init__()
         self.use_tvm = use_tvm
         if use_tvm:
-            from .PAM_TVM import PyramidalAttention
             self.slf_attn = PyramidalAttention(n_head, d_model, d_k, d_v, dropout=dropout, normalize_before=normalize_before, q_k_mask=q_k_mask, k_q_mask=k_q_mask)
         else:
             self.slf_attn = MultiHeadAttention(n_head, d_model, d_k, d_v, dropout=dropout, normalize_before=normalize_before)
@@ -2168,9 +2169,9 @@ class PyraformerTS():
 
     def fit(self, data = "SYNTHh1", data_root_path = "./SYNTHDataset/", batch_size = 32 , epochs = 5 , pred_len = 24):
         """ Main function. """
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_multiplicative', 'DEWINDh_large', 'DEWINDh_small','SYNTH_multiplicative_reversals','SYNTH_additive_reversals']
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_multiplicative', 'DEWINDh_large', 'DEWINDh_small','SYNTH_multiplicative_reversal','SYNTH_additive_reversal']
         if data not in possible_datasets:
-            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_multiplicative', 'DEWINDh_large', 'DEWINDh_small'.")
+            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', ''SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small'.")
         possible_predlens = [24, 48, 96, 168, 336, 720]
         if pred_len not in possible_predlens:
             raise ValueError('Prediction length outside current experiment scope. Please use either 24, 48, 96, 168, 336, 720.')
@@ -2184,6 +2185,8 @@ class PyraformerTS():
                                                                            self.args.predict_step)
         os.makedirs(self.model_save_dir, exist_ok=True)
         self.model_save_dir += 'best_iter.pth'
+        self.model = Pyraformer(self.args).eval()
+        self.model.to(self.args.device)
         if self.args.eval:
             best_metrics = evaluate(self.model, self, self.model_save_dir)
         else:
