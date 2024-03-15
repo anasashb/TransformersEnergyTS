@@ -394,6 +394,7 @@ class TSMixer():
         self.args.iter = iter
         self.args.features = features
         self.args.target = target
+        self.args.iter = iter
 
         print('Beginning to fit the model with the following arguments:')
         print(f'{self.args}')
