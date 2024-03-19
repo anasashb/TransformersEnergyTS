@@ -1,0 +1,15 @@
+Autoformer_ETTh1_ftM_sl96_ll48_pl24_dm512_nh8_el2_dl1_df2048_fc1_ebtimeF_dtTrue_Exp_iter1  
+mse:0.38221895694732666, mae:0.4229758679866791
+
+Autoformer_ETTh1_ftM_sl96_ll48_pl48_dm512_nh8_el2_dl1_df2048_fc1_ebtimeF_dtTrue_Exp_iter1  
+mse:0.43087565898895264, mae:0.4437234699726105
+
+Autoformer_ETTh1_ftM_sl96_ll48_pl168_dm512_nh8_el2_dl1_df2048_fc1_ebtimeF_dtTrue_Exp_iter1  
+mse:0.5046537518501282, mae:0.48230379819869995
+
+Autoformer_ETTh1_ftM_sl96_ll48_pl336_dm512_nh8_el2_dl1_df2048_fc1_ebtimeF_dtTrue_Exp_iter1  
+mse:0.5056519508361816, mae:0.489492803812027
+
+Autoformer_ETTh1_ftM_sl96_ll48_pl720_dm512_nh8_el2_dl1_df2048_fc1_ebtimeF_dtTrue_Exp_iter1  
+mse:0.5106023550033569, mae:0.5189889669418335
+
