@@ -1732,7 +1732,7 @@ class Exp_crossformer(Exp_Basic):
         metrics_mean = metrics_all.sum(axis = 0) / instance_num
 
         # result save
-        folder_path = './results/' + setting + '_iter_' + str(self.iter) + '/'
+        folder_path = './results/' + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
@@ -1791,6 +1791,7 @@ class CrossformerTS():
         ### B.A. While this argument is not given in either of the main-s of the models, it is usable. If true, will unscale preds
         self.args.inverse = False
         
+        
         self.args.use_gpu = True if torch.cuda.is_available() and self.args.use_gpu else False
         if self.args.use_gpu and self.args.use_multi_gpu:
             self.args.devices = self.args.devices.replace(' ','')
@@ -1828,7 +1829,7 @@ class CrossformerTS():
         self.args.patience = early_stopping_patience
 
     def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=20, pred_len=24 ,
-            seq_len = 168):
+            seq_len = 168, iter = 1):
         '''
         Fits the crossformer model.
         Args:
@@ -1839,7 +1840,7 @@ class CrossformerTS():
             pred_len (int): Prediction window length. Default: 24. Recommended: 24, 168, 720.
         '''
         # temporary line
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' ,'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' , 'ETTh1']
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' , 'ETTh1']
         if data not in possible_datasets:
             raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', 'SYNTH_additive', 'SYNTH_additive_reversal', 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal',  'DEWINDh_large', 'DEWINDh_small' ,'ETTh1'.")
         # temporary line
@@ -1853,6 +1854,8 @@ class CrossformerTS():
         self.args.batch_size = batch_size
         self.args.pred_len = pred_len
         self.args.seq_len = seq_len
+        self.args.iter = iter     
+
         if self.args.data in self.data_parser.keys():
             self.data_info = self.data_parser[self.args.data]
             self.args.data_path = self.data_info['data']
@@ -1868,7 +1871,7 @@ class CrossformerTS():
         Experiment_Model = Exp_crossformer
         self.setting = 'Crossformer_{}_il{}_pl{}_sl{}_win{}_fa{}_dm{}_nh{}_el{}_iter{}'.format(self.args.data, self.args.seq_len, self.args.pred_len, 
                             self.args.seg_len, self.args.win_size, self.args.factor,
-                            self.args.d_model, self.args.n_heads, self.args.e_layers, self.iter)
+                            self.args.d_model, self.args.n_heads, self.args.e_layers, self.args.iter)
         # Initialize model class
         self.experiment_model = Experiment_Model(self.args)
         # Train

@@ -2076,7 +2076,7 @@ class Exp_Logsparse(Exp_Basic):
             f.write('mape: ' + str(mape) + '\n')
             f.write('mspe: ' + str(mspe) + '\n')
 
-        return preds , trues ,mae ,mape, mse , losses, first_batch
+        return preds , trues ,mae ,mape , mse , losses, first_batch
     
 ###########################################################################################################################
 # Our Simple User Interface ###############################################################################################
@@ -2176,7 +2176,7 @@ class LogsparseTS():
         self.args.patience = early_stopping_patience
 
     def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=10, pred_len=24,
-            seq_len = 168 , features = 'S' , target = 'TARGET', enc_in = 1, dec_in = 1, c_out = 1 , iter = 1 ):
+            seq_len = 168 , features = 'S' , target = 'TARGET', enc_in = 1, dec_in = 1, c_out = 1, iter = 1):
         '''
         Fits the Logsparse model.
         Args:
@@ -2187,9 +2187,9 @@ class LogsparseTS():
             pred_len (int): Prediction window length. Default: 24. Recommended: 24, 48, 168, 336, 720.
         '''
         # temporary line
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_additive_reveral' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' , 'ETTh1']
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' , 'ETTh1']
         if data not in possible_datasets:
-            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reveral' 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' ,'ETTh1'.")
+            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reversal' 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' ,'ETTh1'.")
         # temporary line
         possible_predlens = [24, 48, 168, 336, 720]
         #if pred_len not in possible_predlens:
@@ -2235,7 +2235,7 @@ class LogsparseTS():
         #if not self.model:
             #raise ValueError('No model trained. Make sure to run .fit() first.')
         # Predict
-        self.preds, self.trues, self.mse, self.mae, self.mape, self.losses, self.first_batch_test = self.experiment_model.test(self.setting)
+        self.preds, self.trues, self.mse, self.mae, self.mape,  self.losses, self.first_batch_test = self.experiment_model.test(self.setting)
         # Clear memory
         torch.cuda.empty_cache()
         return self.preds
