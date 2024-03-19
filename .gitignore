@@ -7,3 +7,6 @@ anasb_tests.ipynb
 # Ignore some intermediate outputs
 some_outputs_to_ignore
 Pyraformer_Jan_version.py
+
+# Ignore checkpoints folder
+checkpoints/
