@@ -2017,7 +2017,7 @@ class InformerTS():
         self.args.patience = early_stopping_patience
 
     def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=8, pred_len=24, 
-            seq_len = 168 , features = 'S'):
+            seq_len = 168 , features = 'S' , iter =1):
         '''
         Fits the informer model.
         Args:
@@ -2042,7 +2042,9 @@ class InformerTS():
         self.args.batch_size = batch_size
         self.args.pred_len = pred_len
         self.args.seq_len = seq_len
-        self.args.features = features      
+        self.args.features = features
+        self.args.iter = iter     
+
 
         # Set up data parser:
         if self.args.data in self.data_parser.keys():
@@ -2062,7 +2064,7 @@ class InformerTS():
         # Set up training settings
         self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_at{}_fc{}_eb{}_dt{}_mx{}_{}_iter{}'.format(self.args.model, self.args.data, self.args.features, 
                 self.args.seq_len, self.args.label_len, self.args.pred_len,
-                self.args.d_model, self.args.n_heads, self.args.s_layers, self.args.d_layers, self.args.d_ff, self.args.attn, self.args.factor, self.args.embed, self.args.distil, self.args.mix, self.args.des, self.iter)
+                self.args.d_model, self.args.n_heads, self.args.s_layers, self.args.d_layers, self.args.d_ff, self.args.attn, self.args.factor, self.args.embed, self.args.distil, self.args.mix, self.args.des, self.args.iter)
         # Initialize Model Class
         self.experiment_model = Experiment_Model(self.args)
         # Train

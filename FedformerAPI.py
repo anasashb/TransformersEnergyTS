@@ -2932,7 +2932,7 @@ class FedformerTS():
         self.args.output_attention = False
         self.args.model_id= self.args.model + '_' + self.args.data + '_' + str(self.args.pred_len)
         # Optimization
-        self.args.num_workers = 10
+        self.args.num_workers = 0
         self.args.itr = 3
         self.args.train_epochs = 10 # epoch size is 10 as in the paper 
         self.args.batch_size = 32 # batch size 32 as in the paper
@@ -2972,7 +2972,7 @@ class FedformerTS():
         self.args.patience = early_stopping_patience
 
     def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=8, pred_len=24,
-            seq_len = 168 , features = 'S' , target = 'TARGET' , enc_in = 1, dec_in = 1, c_out = 1):
+            seq_len = 168 , features = 'S' , target = 'TARGET' , enc_in = 1, dec_in = 1, c_out = 1, iter = 1):
         '''
         Fits the Fedformer model.
         Args:
@@ -3002,7 +3002,8 @@ class FedformerTS():
         self.args.enc_in = enc_in
         self.args.dec_in = dec_in
         self.args.c_out = c_out
-        
+        self.args.iter = iter
+
        #self.args.detail_freq = self.args.freq
        #self.args.freq = self.args.freq[-1:]
         
@@ -3012,9 +3013,9 @@ class FedformerTS():
         # Set up model variable
         Experiment_Model = Exp_Fedformer
         # Set up training settings
-        self.setting = '{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_iter{}'.format(self.args.task_id,
+        self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_iter{}'.format(
         self.args.model, self.args.data,  self.args.features, self.args.seq_len, self.args.label_len, self.args.pred_len, self.args.d_model,
-        self.args.n_heads, self.args.e_layers, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, self.iter)                                                                                       
+        self.args.n_heads, self.args.e_layers, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, self.args.iter)                                                                                       
         # Initialize Model Class
         self.experiment_model = Experiment_Model(self.args)
         # Train

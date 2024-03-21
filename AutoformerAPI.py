@@ -864,7 +864,7 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
 
         border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
         border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
-        border1 = border1s[self.set_type]
+        border1 = border1s[self.set_type]        
         border2 = border2s[self.set_type]
         
         if self.features == 'M' or self.features == 'MS':
@@ -2093,7 +2093,7 @@ class AutoformerTS():
         self.args.target = 'TARGET'
         self.args.des = 'test'
         self.args.dropout = 0.05
-        self.args.num_workers = 10
+        self.args.num_workers = 0
         self.args.freq = 'h'
         self.args.checkpoints = './checkpoints/'
         self.args.bucket_size = 4
@@ -2160,7 +2160,7 @@ class AutoformerTS():
         self.args.patience = early_stopping_patience
 
     def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=8, pred_len=24 , 
-            seq_len = 168 , features = 'S' , target = 'TARGET', enc_in = 1, dec_in = 1, c_out = 1):
+            seq_len = 168 , features = 'S' , target = 'TARGET', enc_in = 1, dec_in = 1, c_out = 1 , iter = 1):
         '''
         Fits the Autoformer model.
         Args:
@@ -2171,9 +2171,9 @@ class AutoformerTS():
             pred_len (int): Prediction window length. Default: 24. Recommended: 24, 48, 168, 336,  720.
         '''
         # temporary line
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_additive_reveral' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' , 'ETTh1']
+        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' , 'ETTh1']
         if data not in possible_datasets:
-            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reveral' 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small', 'ETTh1'.")
+            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reversal' 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small', 'ETTh1'.")
         # temporary line
         possible_predlens = [24, 48, 168, 336, 720]
         if pred_len not in possible_predlens:
@@ -2190,7 +2190,7 @@ class AutoformerTS():
         self.args.enc_in = enc_in
         self.args.dec_in = dec_in
         self.args.c_out = c_out
-        
+        self.args.iter = iter
        #self.args.detail_freq = self.args.freq
        #self.args.freq = self.args.freq[-1:]
         
@@ -2202,7 +2202,7 @@ class AutoformerTS():
         # Set up training settings
         self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_iter{}'.format(
         self.args.model, self.args.data, self.args.features, self.args.seq_len, self.args.label_len, self.args.pred_len,
-        self.args.d_model, self.args.n_heads, self.args.e_layers, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, self.iter)
+        self.args.d_model, self.args.n_heads, self.args.e_layers, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, self.args.iter)
         # Initialize Model Class
         self.experiment_model = Experiment_Model(self.args)
         # Train
