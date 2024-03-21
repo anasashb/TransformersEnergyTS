@@ -1598,7 +1598,7 @@ class Exp_crossformer(Exp_Basic):
         
         return self.model
 
-    def test(self, setting, save_pred = False, inverse = False):
+    def test(self, setting, save_pred = True, inverse = False):
         '''
         Main method for testing model following training. 
         We added a line to be able to call the first batch of data from the test set for possible trouble shooting. 
