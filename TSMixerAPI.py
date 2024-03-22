@@ -36,7 +36,7 @@ def CORR(pred, true):
     '''
     Calculates correlation coefficient.
     '''
-    u = ((true-true.mean(0))*(pred-pred.mean(0))).sum(0) 
+    u = ((true-true.mean(0))*(pred-pred.mean(0))).sum(0)
     d = np.sqrt(((true-true.mean(0))**2*(pred-pred.mean(0))**2).sum(0))
     return (u/d).mean(-1)
 
@@ -79,7 +79,7 @@ def metric(pred, true):
     rmse = RMSE(pred, true)
     mape = MAPE(pred, true)
     mspe = MSPE(pred, true)
-    
+
     return mae,mse,rmse,mape,mspe
 
 
@@ -93,7 +93,7 @@ class dotdict(dict):
 
 
 ###########################################################################################################################
-#  Data loader and dependencies ###########################################################################################  
+#  Data loader and dependencies ###########################################################################################
 class TSFDataLoader:
     """Generate data loader from raw data."""
 
@@ -119,7 +119,7 @@ class TSFDataLoader:
         # S: univariate-univariate, M: multivariate-multivariate, MS:
         # multivariate-univariate
         df = df_raw.set_index('date')
-        
+
         if self.features == 'S':
             df = df[[self.target]]
         elif self.features == 'MS': ## TODO check how this functions with multivariate once we have it
@@ -150,12 +150,12 @@ class TSFDataLoader:
         train_df = df[:train_end]
         val_df = df[train_end - self.seq_len : val_end]
         test_df = df[val_end - self.seq_len : test_end]
-       
+
         # Drop last (if incomplete) batches
         train_df = drop_last_for_tensorflow(train_df, self.batch_size, self.seq_len, self.pred_len)
         val_df = drop_last_for_tensorflow(val_df, self.batch_size, self.seq_len, self.pred_len)
         test_df = drop_last_for_tensorflow(test_df, self.batch_size, self.seq_len, self.pred_len)
-        
+
         # standardize by training set
         self.scaler = StandardScaler()
         self.scaler.fit(train_df.values)
@@ -259,7 +259,7 @@ class RevNorm(layers.Layer):
         x = x * self.stdev[:, :, target_slice]
         x = x + self.mean[:, :, target_slice]
         return x
-  
+
 
 ###########################################################################################################################
 # TSMIxer Block ###########################################################################################################
@@ -286,10 +286,9 @@ def res_block(inputs, norm_type, activation, dropout, ff_dim):
     x = layers.Dropout(dropout)(x)
     x = layers.Dense(inputs.shape[-1])(x)  # [Batch, Input Length, Channel]
     x = layers.Dropout(dropout)(x)
-    return x + res    
-  
-###########################################################################################################################
-# Build TSMixer with Reversible Instance Normalization ####################################################################
+    return x + res
+
+# Build TSMixer with Reversible Instance Normalization #################
 def build_model(
       input_shape,
       pred_len,
@@ -299,14 +298,19 @@ def build_model(
       dropout,
       ff_dim,
       target_slice,
+      ablation,
     ):
-    
+
     """Build TSMixer with Reversible Instance Normalization model."""
 
     inputs = tf.keras.Input(shape=input_shape)
     x = inputs  # [Batch, Input Length, Channel]
-    rev_norm = RevNorm(axis=-2)
-    x = rev_norm(x, 'norm')
+    # NOTE for ablation study ==========================================
+    if ablation == False:
+        rev_norm = RevNorm(axis=-2)
+        x = rev_norm(x, 'norm')
+    # ==================================================================
+
     for _ in range(n_block):
         x = res_block(x, norm_type, activation, dropout, ff_dim)
 
@@ -316,7 +320,12 @@ def build_model(
     x = tf.transpose(x, perm=[0, 2, 1])  # [Batch, Channel, Input Length]
     x = layers.Dense(pred_len)(x)  # [Batch, Channel, Output Length]
     outputs = tf.transpose(x, perm=[0, 2, 1])  # [Batch, Output Length, Channel])
-    outputs = rev_norm(outputs, 'denorm', target_slice)
+
+    # NOTE for ablation study ==========================================
+    if ablation == False:
+        outputs = rev_norm(outputs, 'denorm', target_slice)
+    # ==================================================================
+
     return tf.keras.Model(inputs, outputs)
 
 
@@ -324,24 +333,26 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
 
 class TSMixer():
-    '''
-    I am so thoroughly exhausted you cannot imagine
-    '''
-    
+    """
+    Use model='tsmixer_rev_in' or provide no argument at init to run
+    TSMixer with reversible instance normalization. For ablation study
+    without the RevIN, use model='tsmixer_ablated'.
+    """
+
     def __init__(self, model='tsmixer_rev_in'):
         self.args = dotdict()
         self.args.model = model ## I keep these redundant model args to maybe then combine all API-s
         self.args.seed = 100
-        
+
         ## Variables for Multivariate ##################################################################
-        ## TODO ## 
+        ## TODO ##
         ## I need to take this outside in a method called get_data maybe?
         ## Choices for this and other API-s must be ['S', 'M', 'MS] <-- check if Crossformer can handle
         self.args.features = 'S' ## currently tailored to synth and wind series
         self.args.target = 'TARGET' ## Because I give this name to the column
         ################################################################################################
-        
-        
+
+
         self.args.checkpoints = './checkpoints'
         self.args.delete_checkpoint = False ## I am not sure this is correct default
 
@@ -357,27 +368,28 @@ class TSMixer():
         self.args.activation = 'relu' ## Authors included possible alternative -- 'gelu'
         self.args.temporal_dim = 16 ## temporal feature dimension
         self.args.hidden_dim = 64 ## hidden feature dimension
-        self.args.num_workers = 0 
+        self.args.num_workers = 0
         self.args.itr = 3
+        self.args.ablation = True if  model == "tsmixer_ablated" else False
 
 
 
-        # Add root_path, data_path as args. 
+        # Add root_path, data_path as args.
         # root path serves as LOCAL_CACHE_DIR
         # data_path serves as data + '.csv'
 
 
     def compile(self, learning_rate=1e-4, loss='mse', early_stopping_patience=5):
         ## should include
-        ## loss, 
+        ## loss,
         if loss != 'mse':
             raise ValueError("Loss function not supported. Please use 'mse'.")
         self.args.loss = loss
         self.args.learning_rate = learning_rate
         self.args.patience = early_stopping_patience
 
-    
-    def fit(self, data='SYNTHh', data_root_path='./SynthDataset/', batch_size=32, epochs=100, pred_len=24 , 
+
+    def fit(self, data='SYNTHh', data_root_path='./SynthDataset/', batch_size=32, epochs=100, pred_len=24 ,
             seq_len = 168 , features = 'S' , target = 'TARGET' , iter = 1):
         ## Should include
         ## data, data_root_path, batch_size, epochs, pred_len
@@ -398,12 +410,15 @@ class TSMixer():
 
         print('Beginning to fit the model with the following arguments:')
         print(f'{self.args}')
-        print('='*150)  
+        print('='*150)
 
-        self.setting = f'TSMixer_{self.args.data}_{self.args.features}_sl{self.args.seq_len}_pl{self.args.pred_len}_lr{self.args.learning_rate}_nt{self.args.norm_type}_{self.args.activation}_nb{self.args.n_block}_dp{self.args.dropout}_fd{self.args.ff_dim}_iter{self.args.iter}'
-        
+        if self.args.ablation:
+            self.setting = f'TSMixer_{self.args.data}_{self.args.features}_sl{self.args.seq_len}_pl{self.args.pred_len}_lr{self.args.learning_rate}_nt{self.args.norm_type}_{self.args.activation}_nb{self.args.n_block}_dp{self.args.dropout}_fd{self.args.ff_dim}_iter{self.args.iter}_ablated'
+        else:
+            self.setting = f'TSMixer_{self.args.data}_{self.args.features}_sl{self.args.seq_len}_pl{self.args.pred_len}_lr{self.args.learning_rate}_nt{self.args.norm_type}_{self.args.activation}_nb{self.args.n_block}_dp{self.args.dropout}_fd{self.args.ff_dim}_iter{self.args.iter}'
+
         tf.keras.utils.set_random_seed(self.args.seed)
-        
+
         # Initialize the data loader
         data_loader = TSFDataLoader(
             root_path=self.args.root_path,
@@ -428,8 +443,9 @@ class TSMixer():
             n_block=self.args.n_block,
             ff_dim=self.args.ff_dim,
             target_slice=data_loader.target_slice,
+            ablation=self.args.ablation,
         )
-        
+
         # Set up optimizer
         optimizer = tf.keras.optimizers.Adam(learning_rate=self.args.learning_rate)
         # True compilation
@@ -445,7 +461,7 @@ class TSMixer():
             monitor='val_loss', patience=self.args.patience
         )
         start_training_time = time.time()
-        
+
         # Fit the model
         history = model.fit(
             self.train_data,
@@ -464,7 +480,7 @@ class TSMixer():
         self.model = model # Save as self to move on to .predict()
 
         #return self.model ## NOTE why are we not returning the best model?
-    
+
     def predict(self):
         # Generate predictions
         self.preds = self.model.predict(self.test_data, batch_size=self.args.batch_size)
@@ -474,23 +490,23 @@ class TSMixer():
         for _, targets in self.test_data:
             trues_list.append(targets.numpy())
         self.trues = np.concatenate(trues_list, axis=0)
-                
+
         if self.args.delete_checkpoint:
             for f in glob.glob(self.args.checkpoint_path + '*'):
                 os.remove(f)
-        
+
         # Save results
         folder_path = './results/' + self.setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
         preds = self.preds.reshape(-1, self.preds.shape[-2], self.preds.shape[-1])
-        trues = self.trues.reshape(-1, self.trues.shape[-2], self.trues.shape[-1])        
+        trues = self.trues.reshape(-1, self.trues.shape[-2], self.trues.shape[-1])
 
         mae, mse, rmse, mape, mspe = metric(preds, trues)
         all_metrics = np.array([mae, mse, rmse, mape, mspe])
         np.save(folder_path+'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
         np.save(folder_path+'pred.npy', preds)
-        np.save(folder_path+'true.npy', trues)      
-                
+        np.save(folder_path+'true.npy', trues)
+
         return self.preds
