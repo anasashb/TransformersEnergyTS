@@ -1,12 +1,13 @@
-import os
 import argparse
 import glob
 import logging
+import os
 import time
+
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
+from sklearn.preprocessing import StandardScaler
 from tensorflow.keras import layers
 
 
