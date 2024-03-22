@@ -7,22 +7,38 @@ from statsmodels.tsa.stattools import adfuller
 
 ### Implementation of the energy data synthesizer ammended from Pyraformer
 class SynthesisTS:
-    '''
+    """
     The class is an adaptation of the original energy time series generator developed
-    by the authors of Pyraformer. 
+    by the authors of Pyraformer.
 
-    The original script was restructured into a class for better readability and 
+    The original script was restructured into a class for better readability and
     to reflect the order of operations in the synthesis process.
     Further documentation and comments were added.
-    '''
-    def __init__(self, cycle_periods=[24, 7*24, 30*24], distort_cycles=[(24 // 2, 2*24), (5*24, 9*24), (29*24, 60*24)], series_amount=1, seq_len=17420):
-        '''
+    """
+
+    def __init__(
+        self,
+        cycle_periods=[24, 7 * 24, 30 * 24],
+        distort_cycles=[(24 // 2, 2 * 24), (5 * 24, 9 * 24), (29 * 24, 60 * 24)],
+        series_amount=1,
+        seq_len=17420,
+    ):
+        """
         Args:
-            cycle_periods (list[int, int, int]): Cycle periods to model dependency. For hourly data = [24, 168, 720] which == [day, week, month].
-            distort_cyles (list[tuple(int, int), tuple(int, int), tuple(int, int)]): Optionally distort the cycle periods to model dependencies.
-            series_amount (int): How many synthetic series to generate. (default = 60)
-            seq_len (int): The length of the synthetic series to be generated. (default = 20 months)  
-        '''
+            cycle_periods (list[int, int, int]): Cycle periods to model dependency.
+                                                 For hourly data = [24, 168, 720],
+                                                 which == [day, week, month].
+            distort_cyles (
+                list[
+                    tuple(int, int),
+                    tuple(int, int),
+                    tuple(int, int),
+                    ]
+            ): Optionally distort the cycle periods to model dependencies.
+            series_amount (int): How many synthetic series to generate. (default = 60).
+            seq_len (int): The length of the synthetic series to be generated.
+                           (default = 20 months).
+        """
         self.cycle_periods = cycle_periods
         self.distort_cycles = distort_cycles
         self.series_amount = series_amount
@@ -30,118 +46,140 @@ class SynthesisTS:
 
     # Generates the actual energy time series
     def _generate_sin(self, time_points, sin_coefficients):
-        '''
-        Generates a mixed sinusoidal sequence given the amount of cycle periods, time points, and the amount of coefficients for individual sine functions.            
-        '''
+        """
+        Generates a mixed sinusoidal sequence given the amount of cycle periods,
+        time points, and the amount of coefficients for individual sine functions.
+        """
         if self.distort_cycles:
-            if len(self.distort_cycles)!= len(self.cycle_periods):
-                raise ValueError('The lengths of cycle_periods and distort_cycles arrays do not match.')
+            if len(self.distort_cycles) != len(self.cycle_periods):
+                raise ValueError(
+                    "The lengths of cycle_periods and distort_cycles arrays do not "
+                    "match."
+                )
         # Empty array corresponding to time points
         y = np.full(len(time_points), 100.0)
-        
         # Generate individual sine functions to sum up
         for i in range(len(self.cycle_periods)):
             # If distortion chosen
             if self.distort_cycles:
                 # Get minimum and maximum points
                 min_point, max_point = self.distort_cycles[i]
-                # container 
+                # container
                 sines = np.zeros((max_point - min_point + 1, len(time_points)))
                 # Iterate over the range and generate a sine wave for each parameter
                 for j, period in enumerate(range(min_point, max_point + 1)):
-                    sines[j, :] = sin_coefficients[i] * np.sin(2 * np.pi / period * time_points)
+                    sines[j, :] = sin_coefficients[i] * np.sin(
+                        2 * np.pi / period * time_points
+                    )
 
                 y += np.mean(sines, axis=0)
             else:
-                y += sin_coefficients[i] * np.sin(2 * np.pi / self.cycle_periods[i] * time_points)    
+                y += sin_coefficients[i] * np.sin(
+                    2 * np.pi / self.cycle_periods[i] * time_points
+                )
 
         return y
 
     # Defines a polynomially decaying covariance of B_0
     def _polynomial_decay_cov(self):
-        '''
-        Defines polynomially decaying covariance function for B_0, which will be then drawn from Gaussian distribution.
-        '''
+        """
+        Defines polynomially decaying covariance function for B_0, which will be then
+        drawn from Gaussian distribution.
+        """
         # Mean at each time point t will be 0
         mean = np.zeros(self.seq_len)
         # Obtaining distance matrix
         x_axis = np.arange(self.seq_len)
         distance = x_axis[:, None] - x_axis[None, :]
         distance = np.abs(distance)
-        # Apply polynomial decay 
+        # Apply polynomial decay
         cov = 1 / (distance + 1)
         return mean, cov
-        
+
     def _multivariate_normal(self, mean, cov):
-        '''
+        """
         Generates (series_amount) of Gaussian distributions for drawing the noise terms.
-        Takes mean and cov generated by _polynomial_decay_cov as argument. 
-        '''             
-        noise = np.random.multivariate_normal(mean, cov, (self.series_amount,), 'raise')
+        Takes mean and cov generated by _polynomial_decay_cov as argument.
+        """
+        noise = np.random.multivariate_normal(mean, cov, (self.series_amount,), "raise")
         return noise
-        
+
     def synthesize_single_series(self):
-        '''
+        """
         Generates a single time series with a date-time index.
 
         Returns:
-            self.results (pd.DataFrame) - Returs a univariate time series sequence stored in a Pandas DataFrame alongside a time index column.
-        '''
-        
+            self.results (pd.DataFrame): univariate time series sequence stored in a
+                                         Pandas DataFrame alongside a time index column.
+        """
+
         # Generate initial time stamp
-        init_date_stamp = pd.Timestamp('2022-01-01 00:00:00')
+        init_date_stamp = pd.Timestamp("2022-01-01 00:00:00")
         # Generate fake hour within month of january
-        # "Start of each time series t_0 is uniformly sampled from [0, 720]" - comment from paper
+        # "Start of each time series t_0 is uniformly sampled from [0, 720]"
         start = int(np.random.uniform(0, self.cycle_periods[-1]))
-        # Generate time points for the _generate_sin ---- May be reduntand after the datestamp generation was added
+        # Generate time points for the _generate_sin
         time_points = start + np.arange(self.seq_len)
         # Obtain 'real' start date of the series
-        real_start_date = init_date_stamp + pd.to_timedelta(start, 'H')
+        real_start_date = init_date_stamp + pd.to_timedelta(start, "H")
         # Generate datetime index for entire sequence
-        datetime_index = pd.date_range(start=real_start_date, periods=self.seq_len, freq='H')
-        # "Coefficients of the three sine functions B_1, B_2, B_3 for each time series sampled uniformly from [5, 10]"
+        datetime_index = pd.date_range(
+            start=real_start_date, periods=self.seq_len, freq="H"
+        )
+        # Coefficients of the sine functions B_1, B_2, B_3 uniformly from [5, 10]
         sin_coefficients = np.random.uniform(5, 10, 3)
         # Generate time series
         y = self._generate_sin(time_points, sin_coefficients)
-        # Define mean and covariance of the noise term B_0 - a Gaussian process with a polynomially decaying covariance function.
+        # Define mean and covariance of the noise term B_0
         mean, cov = self._polynomial_decay_cov()
-        # Draw B_0 -s for each time point t for each time series from Gaussian distribution
-        noise = self._multivariate_normal(mean, cov) 
+        # Draw B_0 -s for each time point t for from Gaussian distribution
+        noise = self._multivariate_normal(mean, cov)
         series = y + noise
-        # This specific format is tailored for the temporal embedding used in large majority of Transformer-based TS forecasting frameworks
-        df = pd.DataFrame({'date': datetime_index, 'TARGET': series.squeeze()})
+        # Format to make compatible with TransformersTS
+        df = pd.DataFrame({"date": datetime_index, "TARGET": series.squeeze()})
 
         # Add as a self variable
         self.result = df
 
         return self.result
-    
-    
+
     @staticmethod
-    def add_multiplicative_trend(df=None, trend_rate=1.00005, reversal_offset=0.00002, reversal=False, reversal_timepoints=None):
-        '''
+    def add_multiplicative_trend(
+        df=None,
+        trend_rate=1.00005,
+        reversal_offset=0.00002,
+        reversal=False,
+        reversal_timepoints=None,
+    ):
+        """
         Adds a multiplicative trend and optionally reversals to an existing time series.
-        
+
         Args:
-            df(pd.DataFrame, optional): DataFrame containing the synthesized time series to apply trend to. Will default to self.result if exists.
+            df(pd.DataFrame, optional): DataFrame containing the synthesized time series
+                                        to apply trend to. Will default to self.result
+                                        if exists.
             trend_rate (float): Multiplicative trend rate.
-            reversal_offset (float): A rate to offset the trend rate by to make reversals smoother.
+            reversal_offset (float): A rate to offset the trend rate by to make
+                                     reversals smoother.
             reversal (bool): Whether to apply trend reversals.
-            reversal_timepoints (list[int]): A list of time steps t at which reversals should happen.
-        '''
+            reversal_timepoints (list[int]): A list of time steps t at which reversals
+                                             should happen.
+        """
         if df is None:
-            raise ValueError('No data given: please provide a DataFrame.')
+            raise ValueError("No data given: please provide a DataFrame.")
         if reversal and reversal_timepoints is None:
-            raise ValueError('No reversal time points given. Please provide a list[int].')
+            raise ValueError(
+                "No reversal time points given. Please provide a list[int]."
+            )
 
         df = df.copy()
-        y = df['TARGET'].values
+        y = df["TARGET"].values
         # Define time points t
         t = np.arange(len(y))
-       
-        reverse_trend_rate = trend_rate - reversal_offset #### 0.00001 and 0.000015 also good options for a bit smoother but less noticable
+
+        reverse_trend_rate = trend_rate - reversal_offset
         current_rate = trend_rate
-        for i in range(0,len(t)):
+        for i in range(0, len(t)):
             if reversal and i in reversal_timepoints:
                 if current_rate == trend_rate:
                     current_rate = reverse_trend_rate
@@ -149,49 +187,64 @@ class SynthesisTS:
                     current_rate = trend_rate
                     # Invert trend rate
             y[i] = y[i] * ((current_rate ** i))
-                
 
-        result_df = pd.DataFrame({'TARGET': y.squeeze()}, index=df.index)
-        
+        result_df = pd.DataFrame({"TARGET": y.squeeze()}, index=df.index)
+
         return result_df
-    
-    
+
     @staticmethod
-    def add_additive_trend(df=None, trend_slope=0.01, trend_slope_increment=0.005, accumulated_retain_rate=0.5, reversal=False, reversal_timepoints=None):
-        '''
+    def add_additive_trend(
+        df=None,
+        trend_slope=0.01,
+        trend_slope_increment=0.005,
+        accumulated_retain_rate=0.5,
+        reversal=False,
+        reversal_timepoints=None,
+    ):
+        """
         Adds an additive trend and optionally reversals to an existing time series.
 
         Args:
-            df(pd.DataFrame, optional): DataFrame containing the synthesized time series to apply trend to. Will use self.result if existing.
+            df(pd.DataFrame, optional): DataFrame containing the synthesized time series
+                                        to apply trend to. Will use self.result if
+                                        existing.
             trend_slope (float): Additive trend slope.
-            trend_slope_increment (float): Increase trend_rate when coming up from a decreasing trend --- helps maintain overall rising trend.
-            accumulated_retain_rate (float): How much of the accumulated trend to retain -- helps make additive trend reversals smoother
+            trend_slope_increment (float): Increase trend_rate when coming up from a
+                                           decreasing trend --- helps maintain overall
+                                           rising trend.
+            accumulated_retain_rate (float): How much of the accumulated trend to retain
+                                             -- helps make additive trend reversals
+                                             smoother
             reversal (bool): Whether to apply trend reversals.
-            reversal_timepoints (list[int]): A list of time steps t at which reversals should happen.
-        '''
+            reversal_timepoints (list[int]): A list of time steps t at which reversals
+                                             should happen.
+        """
         # If dataframe is not given use self.result
         if df is None:
-            raise ValueError('No data given: please provide a DataFrame.')
-        
+            raise ValueError("No data given: please provide a DataFrame.")
+
         if reversal and reversal_timepoints is None:
-            raise ValueError('No reversal time points given. Please provide a list[int].')
+            raise ValueError(
+                "No reversal time points given. Please provide a list[int]."
+            )
 
         df = df.copy()
-        
+
         # Define series y
-        y = df['TARGET'].values
+        y = df["TARGET"].values
         # Define time points t
         t = np.arange(len(y))
-  
+
         # Variables to handle trend reversals more smoothly
         accumulated = 0
         from_increase_path = True
-            
+
         for i in range(0, len(t)):
             if reversal and i in reversal_timepoints:
                 # Just reverse direction if trend additive
                 trend_slope = -trend_slope
-                # Increment and from_increase_path allow us to increment trend slope when reversing from a decrease
+                # Increment and from_increase_path allow us to
+                # increment trend slope when reversing from a decrease
                 # Otherwise it may not catch up
                 if not from_increase_path:
                     trend_slope += trend_slope_increment
@@ -200,35 +253,38 @@ class SynthesisTS:
                     from_increase_path = False
                 # Reset some part of cumulation for trend not to catch up too rapidly
                 accumulated *= accumulated_retain_rate
-            
+
             accumulated += trend_slope
-                
+
             y[i] += accumulated
-                
-        result_df = pd.DataFrame({'TARGET': y.squeeze()}, index=df.index)
-        
+
+        result_df = pd.DataFrame({"TARGET": y.squeeze()}, index=df.index)
+
         return result_df
-    
+
 
 def describe_and_test(time_series):
-    '''
-    Prints descriptive statistics and conducts Augmented Dickey-Fuller unit-root test on given time series.
-    
+    """
+    Prints descriptive statistics and conducts Augmented Dickey-Fuller unit-root test on
+    given time series.
+
     Args:
-        time_series (pd.Series, pd.DataFrame): Time series sequence given as either pandas.Series or single-column pandas.DataFrame.
-    '''
+        time_series (pd.Series, pd.DataFrame): Time series sequence given as either
+                                               pandas.Series or single-column
+                                               pandas.DataFrame.
+    """
     test_result = adfuller(time_series)
-    print('='*60)
-    print('DESCRIPTIVE STATISTICS:')
-    print('-'*60)
+    print("=" * 60)
+    print("DESCRIPTIVE STATISTICS:")
+    print("-" * 60)
     print(time_series.describe())
-    print('='*60)
-    print('ADF TEST RESULTS:')
-    print('-'*60)
-    print(f'Test Statistic:  {test_result[0]:.4f}')
-    print(f'p-value:  {test_result[1]:.4f}')
+    print("=" * 60)
+    print("ADF TEST RESULTS:")
+    print("-" * 60)
+    print(f"Test Statistic:  {test_result[0]:.4f}")
+    print(f"p-value:  {test_result[1]:.4f}")
     if test_result[1] < 0.05:
-        print('Null hypothesis of non-stationarity can be rejected.')
+        print("Null hypothesis of non-stationarity can be rejected.")
     else:
-        print('Null hypothesis of non-stationarity cannot be rejected.')
-    print('='*60)
+        print("Null hypothesis of non-stationarity cannot be rejected.")
+    print("=" * 60)
