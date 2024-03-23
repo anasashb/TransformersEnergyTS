@@ -15,13 +15,13 @@ from torch import optim
 from torch.nn import DataParallel
 from torch.utils.data import DataLoader, Dataset
 
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
 
 
 # String splitter
 def string_split(str_for_split):
-    str_no_space = str_for_split.replace(' ', '')
-    str_split = str_no_space.split(',')
+    str_no_space = str_for_split.replace(" ", "")
+    str_split = str_no_space.split(",")
     value_list = [eval(x) for x in str_split]
 
     return value_list
@@ -30,6 +30,7 @@ def string_split(str_for_split):
 # Dot dictionary
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
+
     __getattr__ = dict.get
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
@@ -103,12 +104,13 @@ def metric(pred, true):
 
 
 # Standardscaling
-class StandardScaler():
+class StandardScaler:
     """
     Straightforward StandardScaler that can handle Pytorch tensors.
     Methods included are '.fit()', '.transform()', '.inverse_transform().'
     """
-    def __init__(self, mean=0., std=1.):
+
+    def __init__(self, mean=0.0, std=1.0):
         self.mean = mean
         self.std = std
 
@@ -117,13 +119,29 @@ class StandardScaler():
         self.std = data.std(0)
 
     def transform(self, data):
-        mean = torch.from_numpy(self.mean).type_as(data).to(data.device) if torch.is_tensor(data) else self.mean
-        std = torch.from_numpy(self.std).type_as(data).to(data.device) if torch.is_tensor(data) else self.std
+        mean = (
+            torch.from_numpy(self.mean).type_as(data).to(data.device)
+            if torch.is_tensor(data)
+            else self.mean
+        )
+        std = (
+            torch.from_numpy(self.std).type_as(data).to(data.device)
+            if torch.is_tensor(data)
+            else self.std
+        )
         return (data - mean) / std
 
     def inverse_transform(self, data):
-        mean = torch.from_numpy(self.mean).type_as(data).to(data.device) if torch.is_tensor(data) else self.mean
-        std = torch.from_numpy(self.std).type_as(data).to(data.device) if torch.is_tensor(data) else self.std
+        mean = (
+            torch.from_numpy(self.mean).type_as(data).to(data.device)
+            if torch.is_tensor(data)
+            else self.mean
+        )
+        std = (
+            torch.from_numpy(self.std).type_as(data).to(data.device)
+            if torch.is_tensor(data)
+            else self.std
+        )
         return (data * std) + mean
 
 
@@ -134,7 +152,7 @@ class Dataset_ETT_hour(Dataset):
         data_path="ETTh1.csv",
         flag="train",
         size=None,
-        data_split = [0.7, 0.1, 0.2],
+        data_split=[0.7, 0.1, 0.2],
         scale=True,
         inverse=False,
         scale_statistic=None,
@@ -144,7 +162,7 @@ class Dataset_ETT_hour(Dataset):
         self.pred_len = size[1]
         # init
         assert flag in ["train", "test", "val"]
-        type_map = {"train":0, "val":1, "test":2}
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
         self.scale = scale
         self.inverse = inverse
@@ -157,18 +175,28 @@ class Dataset_ETT_hour(Dataset):
     def __read_data__(self):
         df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
         if self.data_split:
-            if (self.data_split[0] > 1):
-                train_num = self.data_split[0]; val_num = self.data_split[1]; test_num = self.data_split[2];
+            if self.data_split[0] > 1:
+                train_num = self.data_split[0]
+                val_num = self.data_split[1]
+                test_num = self.data_split[2]
             else:
-                train_num = int(len(df_raw)*self.data_split[0]);
-                test_num = int(len(df_raw)*self.data_split[2])
-                val_num = len(df_raw) - train_num - test_num;
+                train_num = int(len(df_raw) * self.data_split[0])
+                test_num = int(len(df_raw) * self.data_split[2])
+                val_num = len(df_raw) - train_num - test_num
             border1s = [0, train_num - self.seq_len, train_num + val_num - self.seq_len]
-            border2s = [train_num, train_num+val_num, train_num + val_num + test_num]
+            border2s = [train_num, train_num + val_num, train_num + val_num + test_num]
 
         else:
-            border1s = [0, 12*30*24 - self.seq_len, 12*30*24+4*30*24 - self.seq_len]
-            border2s = [12*30*24, 12*30*24+4*30*24, 12*30*24+8*30*24]
+            border1s = [
+                0,
+                12 * 30 * 24 - self.seq_len,
+                12 * 30 * 24 + 4 * 30 * 24 - self.seq_len,
+            ]
+            border2s = [
+                12 * 30 * 24,
+                12 * 30 * 24 + 4 * 30 * 24,
+                12 * 30 * 24 + 8 * 30 * 24,
+            ]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
@@ -178,17 +206,19 @@ class Dataset_ETT_hour(Dataset):
         if self.scale:
             if self.scale_statistic is None:
                 self.scaler = StandardScaler()
-                train_data = df_data[border1s[0]:border2s[0]]
+                train_data = df_data[border1s[0] : border2s[0]]
                 self.scaler.fit(train_data.values)
             else:
-                self.scaler = StandardScaler(mean = self.scale_statistic["mean"], std = self.scale_statistic["std"])
+                self.scaler = StandardScaler(
+                    mean=self.scale_statistic["mean"], std=self.scale_statistic["std"]
+                )
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
 
         self.data_x = data[border1:border2]
         if self.inverse:
-        ## Then data y is defined from unscaled values
+            # Then data y is defined from unscaled values
             self.data_y = df_data[border1:border2]
         else:
             # Include scaled data as y
@@ -206,21 +236,16 @@ class Dataset_ETT_hour(Dataset):
         return seq_x, seq_y
 
     def __len__(self):
-        return len(self.data_x) - self.seq_len- self.pred_len + 1
+        return len(self.data_x) - self.seq_len - self.pred_len + 1
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
+
 
 class Dataset_WIND_hour(Dataset):
     """
     PyTorch dataloader class for an hourly dataset that is an adaptation of the original
     Dataset_MTS in Crossformer combined with hourly dataset class from Informer.
-
-    New ARG:
-        data_split: a list of either [0.7, 0.1, 0.2] ratios or absolute numbers
-                    [12*30*24, 4*30*24, 4*30*24].I f not given, the function just
-                    defaults to the way Informer and Autoformer hourly data loaders make
-                    the split.
     """
 
     def __init__(
@@ -229,21 +254,21 @@ class Dataset_WIND_hour(Dataset):
         data_path="DEWINDh_small.csv",
         flag="train",
         size=None,
-        data_split = [0.7, 0.1, 0.2],
+        data_split=[0.7, 0.1, 0.2],
         scale=True,
         inverse=False,
         scale_statistic=None,
     ):
         # NOTE Renamed in_len and out_len to seq_len and pred_len to use same notation
         if size == None:
-           self.seq_len = 24*4*4
-           self.pred_len = 24*4
+            self.seq_len = 24 * 4 * 4
+            self.pred_len = 24 * 4
         else:
             self.seq_len = size[0]
             self.pred_len = size[1]
         # init
-        assert flag in ['train', 'test', 'val']
-        type_map = {'train':0, 'val':1, 'test':2}
+        assert flag in ["train", "test", "val"]
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
         self.scale = scale
         self.inverse = inverse  # NOTE added this
@@ -258,19 +283,29 @@ class Dataset_WIND_hour(Dataset):
         # If the data_split argument is given
         if self.data_split:
             # Check whether data split is given in sequence lengths
-            if (self.data_split[0] > 1):
-                train_num = self.data_split[0]; val_num = self.data_split[1]; test_num = self.data_split[2];
+            if self.data_split[0] > 1:
+                train_num = self.data_split[0]
+                val_num = self.data_split[1]
+                test_num = self.data_split[2]
             # Or as ratios
             else:
-                train_num = int(len(df_raw)*self.data_split[0]);
-                test_num = int(len(df_raw)*self.data_split[2])
-                val_num = len(df_raw) - train_num - test_num;
+                train_num = int(len(df_raw) * self.data_split[0])
+                test_num = int(len(df_raw) * self.data_split[2])
+                val_num = len(df_raw) - train_num - test_num
             # Define borders
             border1s = [0, train_num - self.seq_len, train_num + val_num - self.seq_len]
-            border2s = [train_num, train_num+val_num, train_num + val_num + test_num]
+            border2s = [train_num, train_num + val_num, train_num + val_num + test_num]
         else:
-            border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
-            border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
+            border1s = [
+                0,
+                18 * 30 * 24 - self.seq_len,
+                18 * 30 * 24 + 3 * 30 * 24 - self.seq_len,
+            ]
+            border2s = [
+                18 * 30 * 24,
+                18 * 30 * 24 + 3 * 30 * 24,
+                18 * 30 * 24 + 6 * 30 * 24,
+            ]
 
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
@@ -283,10 +318,12 @@ class Dataset_WIND_hour(Dataset):
         if self.scale:
             if self.scale_statistic is None:
                 self.scaler = StandardScaler()
-                train_data = df_data[border1s[0]:border2s[0]]
+                train_data = df_data[border1s[0] : border2s[0]]
                 self.scaler.fit(train_data.values)
             else:
-                self.scaler = StandardScaler(mean = self.scale_statistic['mean'], std = self.scale_statistic['std'])
+                self.scaler = StandardScaler(
+                    mean=self.scale_statistic["mean"], std=self.scale_statistic["std"]
+                )
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
@@ -322,34 +359,28 @@ class Dataset_SYNTH_hour(Dataset):
     """
     PyTorch dataloader class for an hourly dataset that is an adaptation of the original
     Dataset_MTS in Crossformer combined with hourly dataset class from Informer.
-
-    New ARG:
-        data_split: a list of either [0.7, 0.1, 0.2] ratios or absolute numbers
-                    [12*30*24, 4*30*24, 4*30*24]. If not given, the function just
-                    defaults to the way Informer and Autoformer hourly data loaders
-                    make the split.
     """
 
     def __init__(
-            self,
-            root_path,
-            data_path="SYNTHh1.csv",
-            flag="train",
-            size=None,
-            data_split = [0.7, 0.1, 0.2],
-            scale=True,
-            inverse=False,
-            scale_statistic=None,
-        ):
+        self,
+        root_path,
+        data_path="SYNTHh1.csv",
+        flag="train",
+        size=None,
+        data_split=[0.7, 0.1, 0.2],
+        scale=True,
+        inverse=False,
+        scale_statistic=None,
+    ):
         if size == None:
-           self.seq_len = 24*4*4
-           self.pred_len = 24*4
+            self.seq_len = 24 * 4 * 4
+            self.pred_len = 24 * 4
         else:
             self.seq_len = size[0]
             self.pred_len = size[1]
         # init
         assert flag in ["train", "test", "val"]
-        type_map = {"train":0, "val":1, "test":2}
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
         self.scale = scale
         self.inverse = inverse
@@ -362,18 +393,28 @@ class Dataset_SYNTH_hour(Dataset):
     def __read_data__(self):
         df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
         if self.data_split:
-            if (self.data_split[0] > 1):
-                train_num = self.data_split[0]; val_num = self.data_split[1]; test_num = self.data_split[2];
+            if self.data_split[0] > 1:
+                train_num = self.data_split[0]
+                val_num = self.data_split[1]
+                test_num = self.data_split[2]
             else:
-                train_num = int(len(df_raw)*self.data_split[0]);
-                test_num = int(len(df_raw)*self.data_split[2])
-                val_num = len(df_raw) - train_num - test_num;
+                train_num = int(len(df_raw) * self.data_split[0])
+                test_num = int(len(df_raw) * self.data_split[2])
+                val_num = len(df_raw) - train_num - test_num
             # Define borders
             border1s = [0, train_num - self.seq_len, train_num + val_num - self.seq_len]
-            border2s = [train_num, train_num+val_num, train_num + val_num + test_num]
+            border2s = [train_num, train_num + val_num, train_num + val_num + test_num]
         else:
-            border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
-            border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
+            border1s = [
+                0,
+                18 * 30 * 24 - self.seq_len,
+                18 * 30 * 24 + 3 * 30 * 24 - self.seq_len,
+            ]
+            border2s = [
+                18 * 30 * 24,
+                18 * 30 * 24 + 3 * 30 * 24,
+                18 * 30 * 24 + 6 * 30 * 24,
+            ]
 
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
@@ -384,10 +425,12 @@ class Dataset_SYNTH_hour(Dataset):
         if self.scale:
             if self.scale_statistic is None:
                 self.scaler = StandardScaler()
-                train_data = df_data[border1s[0]:border2s[0]]
+                train_data = df_data[border1s[0] : border2s[0]]
                 self.scaler.fit(train_data.values)
             else:
-                self.scaler = StandardScaler(mean = self.scale_statistic["mean"], std = self.scale_statistic["std"])
+                self.scaler = StandardScaler(
+                    mean=self.scale_statistic["mean"], std=self.scale_statistic["std"]
+                )
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
@@ -416,17 +459,10 @@ class Dataset_SYNTH_hour(Dataset):
         return self.scaler.inverse_transform(data)
 
 
-
 class Dataset_SYNTH_additive(Dataset):
     """
     PyTorch dataloader class for an hourly dataset that is an adaptation of the original
     Dataset_MTS in Crossformer combined with hourly dataset class from Informer.
-
-    New ARG:
-        data_split: a list of either [0.7, 0.1, 0.2] ratios or absolute numbers
-                    [12*30*24, 4*30*24, 4*30*24]. If not given, the function just
-                    defaults to the way Informer and Autoformer hourly data loaders make
-                    the split.
     """
 
     def __init__(
@@ -435,21 +471,21 @@ class Dataset_SYNTH_additive(Dataset):
         data_path="SYNTH_additive.csv",
         flag="train",
         size=None,
-        data_split = [0.7, 0.1, 0.2],
+        data_split=[0.7, 0.1, 0.2],
         scale=True,
         inverse=False,
         scale_statistic=None,
     ):
 
         if size == None:
-           self.seq_len = 24*4*4
-           self.pred_len = 24*4
+            self.seq_len = 24 * 4 * 4
+            self.pred_len = 24 * 4
         else:
             self.seq_len = size[0]
             self.pred_len = size[1]
         # init
         assert flag in ["train", "test", "val"]
-        type_map = {"train":0, "val":1, "test":2}
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
         self.scale = scale
         self.inverse = inverse
@@ -463,18 +499,28 @@ class Dataset_SYNTH_additive(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
 
         if self.data_split:
-            if (self.data_split[0] > 1):
-                train_num = self.data_split[0]; val_num = self.data_split[1]; test_num = self.data_split[2];
+            if self.data_split[0] > 1:
+                train_num = self.data_split[0]
+                val_num = self.data_split[1]
+                test_num = self.data_split[2]
             else:
-                train_num = int(len(df_raw)*self.data_split[0]);
-                test_num = int(len(df_raw)*self.data_split[2])
-                val_num = len(df_raw) - train_num - test_num;
+                train_num = int(len(df_raw) * self.data_split[0])
+                test_num = int(len(df_raw) * self.data_split[2])
+                val_num = len(df_raw) - train_num - test_num
             border1s = [0, train_num - self.seq_len, train_num + val_num - self.seq_len]
-            border2s = [train_num, train_num+val_num, train_num + val_num + test_num]
+            border2s = [train_num, train_num + val_num, train_num + val_num + test_num]
 
         else:
-            border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
-            border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
+            border1s = [
+                0,
+                18 * 30 * 24 - self.seq_len,
+                18 * 30 * 24 + 3 * 30 * 24 - self.seq_len,
+            ]
+            border2s = [
+                18 * 30 * 24,
+                18 * 30 * 24 + 3 * 30 * 24,
+                18 * 30 * 24 + 6 * 30 * 24,
+            ]
 
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
@@ -485,10 +531,12 @@ class Dataset_SYNTH_additive(Dataset):
         if self.scale:
             if self.scale_statistic is None:
                 self.scaler = StandardScaler()
-                train_data = df_data[border1s[0]:border2s[0]]
+                train_data = df_data[border1s[0] : border2s[0]]
                 self.scaler.fit(train_data.values)
             else:
-                self.scaler = StandardScaler(mean = self.scale_statistic['mean'], std = self.scale_statistic['std'])
+                self.scaler = StandardScaler(
+                    mean=self.scale_statistic["mean"], std=self.scale_statistic["std"]
+                )
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
@@ -527,26 +575,26 @@ class Dataset_SYNTH_additive_reversal(Dataset):
     """
 
     def __init__(
-            self,
-            root_path,
-            data_path="SYNTH_additive_reversals.csv",
-            flag="train",
-            size=None,
-            data_split = [0.7, 0.1, 0.2],
-            scale=True,
-            inverse=False,
-            scale_statistic=None
-        ):
+        self,
+        root_path,
+        data_path="SYNTH_additive_reversals.csv",
+        flag="train",
+        size=None,
+        data_split=[0.7, 0.1, 0.2],
+        scale=True,
+        inverse=False,
+        scale_statistic=None,
+    ):
 
         if size == None:
-           self.seq_len = 24*4*4
-           self.pred_len = 24*4
+            self.seq_len = 24 * 4 * 4
+            self.pred_len = 24 * 4
         else:
             self.seq_len = size[0]
             self.pred_len = size[1]
         # init
         assert flag in ["train", "test", "val"]
-        type_map = {"train":0, "val":1, "test":2}
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
         self.scale = scale
         self.inverse = inverse
@@ -560,18 +608,28 @@ class Dataset_SYNTH_additive_reversal(Dataset):
         df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
 
         if self.data_split:
-            if (self.data_split[0] > 1):
-                train_num = self.data_split[0]; val_num = self.data_split[1]; test_num = self.data_split[2];
+            if self.data_split[0] > 1:
+                train_num = self.data_split[0]
+                val_num = self.data_split[1]
+                test_num = self.data_split[2]
             else:
-                train_num = int(len(df_raw)*self.data_split[0]);
-                test_num = int(len(df_raw)*self.data_split[2])
-                val_num = len(df_raw) - train_num - test_num;
+                train_num = int(len(df_raw) * self.data_split[0])
+                test_num = int(len(df_raw) * self.data_split[2])
+                val_num = len(df_raw) - train_num - test_num
             border1s = [0, train_num - self.seq_len, train_num + val_num - self.seq_len]
-            border2s = [train_num, train_num+val_num, train_num + val_num + test_num]
+            border2s = [train_num, train_num + val_num, train_num + val_num + test_num]
 
         else:
-            border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
-            border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
+            border1s = [
+                0,
+                18 * 30 * 24 - self.seq_len,
+                18 * 30 * 24 + 3 * 30 * 24 - self.seq_len,
+            ]
+            border2s = [
+                18 * 30 * 24,
+                18 * 30 * 24 + 3 * 30 * 24,
+                18 * 30 * 24 + 6 * 30 * 24,
+            ]
 
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
@@ -582,10 +640,12 @@ class Dataset_SYNTH_additive_reversal(Dataset):
         if self.scale:
             if self.scale_statistic is None:
                 self.scaler = StandardScaler()
-                train_data = df_data[border1s[0]:border2s[0]]
+                train_data = df_data[border1s[0] : border2s[0]]
                 self.scaler.fit(train_data.values)
             else:
-                self.scaler = StandardScaler(mean = self.scale_statistic["mean"], std = self.scale_statistic["std"])
+                self.scaler = StandardScaler(
+                    mean=self.scale_statistic["mean"], std=self.scale_statistic["std"]
+                )
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
@@ -612,6 +672,7 @@ class Dataset_SYNTH_additive_reversal(Dataset):
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
+
 
 class Dataset_SYNTH_multiplicative(Dataset):
     """
@@ -625,21 +686,21 @@ class Dataset_SYNTH_multiplicative(Dataset):
         data_path="SYNTH_multiplicative.csv",
         flag="train",
         size=None,
-        data_split = [0.7, 0.1, 0.2],
+        data_split=[0.7, 0.1, 0.2],
         scale=True,
         inverse=False,
-        scale_statistic=None
+        scale_statistic=None,
     ):
 
         if size == None:
-           self.seq_len = 24*4*4
-           self.pred_len = 24*4
+            self.seq_len = 24 * 4 * 4
+            self.pred_len = 24 * 4
         else:
             self.seq_len = size[0]
             self.pred_len = size[1]
         # init
         assert flag in ["train", "test", "val"]
-        type_map = {"train":0, "val":1, "test":2}
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
         self.scale = scale
         self.inverse = inverse
@@ -652,17 +713,27 @@ class Dataset_SYNTH_multiplicative(Dataset):
     def __read_data__(self):
         df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
         if self.data_split:
-            if (self.data_split[0] > 1):
-                train_num = self.data_split[0]; val_num = self.data_split[1]; test_num = self.data_split[2];
+            if self.data_split[0] > 1:
+                train_num = self.data_split[0]
+                val_num = self.data_split[1]
+                test_num = self.data_split[2]
             else:
-                train_num = int(len(df_raw)*self.data_split[0]);
-                test_num = int(len(df_raw)*self.data_split[2])
-                val_num = len(df_raw) - train_num - test_num;
+                train_num = int(len(df_raw) * self.data_split[0])
+                test_num = int(len(df_raw) * self.data_split[2])
+                val_num = len(df_raw) - train_num - test_num
             border1s = [0, train_num - self.seq_len, train_num + val_num - self.seq_len]
-            border2s = [train_num, train_num+val_num, train_num + val_num + test_num]
+            border2s = [train_num, train_num + val_num, train_num + val_num + test_num]
         else:
-            border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
-            border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
+            border1s = [
+                0,
+                18 * 30 * 24 - self.seq_len,
+                18 * 30 * 24 + 3 * 30 * 24 - self.seq_len,
+            ]
+            border2s = [
+                18 * 30 * 24,
+                18 * 30 * 24 + 3 * 30 * 24,
+                18 * 30 * 24 + 6 * 30 * 24,
+            ]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
@@ -672,10 +743,12 @@ class Dataset_SYNTH_multiplicative(Dataset):
         if self.scale:
             if self.scale_statistic is None:
                 self.scaler = StandardScaler()
-                train_data = df_data[border1s[0]:border2s[0]]
+                train_data = df_data[border1s[0] : border2s[0]]
                 self.scaler.fit(train_data.values)
             else:
-                self.scaler = StandardScaler(mean = self.scale_statistic["mean"], std = self.scale_statistic["std"])
+                self.scaler = StandardScaler(
+                    mean=self.scale_statistic["mean"], std=self.scale_statistic["std"]
+                )
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
@@ -704,6 +777,7 @@ class Dataset_SYNTH_multiplicative(Dataset):
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
 
+
 class Dataset_SYNTH_multiplicative_reversal(Dataset):
     """
     PyTorch dataloader class for an hourly dataset that is an adaptation of the original
@@ -716,21 +790,21 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
         data_path="SYNTH_multiplicative_reversals.csv",
         flag="train",
         size=None,
-        data_split = [0.7, 0.1, 0.2],
+        data_split=[0.7, 0.1, 0.2],
         scale=True,
         inverse=False,
-        scale_statistic=None
+        scale_statistic=None,
     ):
 
         if size == None:
-           self.seq_len = 24*4*4
-           self.pred_len = 24*4
+            self.seq_len = 24 * 4 * 4
+            self.pred_len = 24 * 4
         else:
             self.seq_len = size[0]
             self.pred_len = size[1]
         # init
         assert flag in ["train", "test", "val"]
-        type_map = {"train":0, "val":1, "test":2}
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
         self.scale = scale
         self.inverse = inverse
@@ -743,18 +817,28 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
     def __read_data__(self):
         df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
         if self.data_split:
-            if (self.data_split[0] > 1):
-                train_num = self.data_split[0]; val_num = self.data_split[1]; test_num = self.data_split[2];
+            if self.data_split[0] > 1:
+                train_num = self.data_split[0]
+                val_num = self.data_split[1]
+                test_num = self.data_split[2]
             else:
-                train_num = int(len(df_raw)*self.data_split[0]);
-                test_num = int(len(df_raw)*self.data_split[2])
-                val_num = len(df_raw) - train_num - test_num;
+                train_num = int(len(df_raw) * self.data_split[0])
+                test_num = int(len(df_raw) * self.data_split[2])
+                val_num = len(df_raw) - train_num - test_num
             border1s = [0, train_num - self.seq_len, train_num + val_num - self.seq_len]
-            border2s = [train_num, train_num+val_num, train_num + val_num + test_num]
+            border2s = [train_num, train_num + val_num, train_num + val_num + test_num]
 
         else:
-            border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
-            border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
+            border1s = [
+                0,
+                18 * 30 * 24 - self.seq_len,
+                18 * 30 * 24 + 3 * 30 * 24 - self.seq_len,
+            ]
+            border2s = [
+                18 * 30 * 24,
+                18 * 30 * 24 + 3 * 30 * 24,
+                18 * 30 * 24 + 6 * 30 * 24,
+            ]
 
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
@@ -764,10 +848,12 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
         if self.scale:
             if self.scale_statistic is None:
                 self.scaler = StandardScaler()
-                train_data = df_data[border1s[0]:border2s[0]]
+                train_data = df_data[border1s[0] : border2s[0]]
                 self.scaler.fit(train_data.values)
             else:
-                self.scaler = StandardScaler(mean = self.scale_statistic["mean"], std = self.scale_statistic["std"])
+                self.scaler = StandardScaler(
+                    mean=self.scale_statistic["mean"], std=self.scale_statistic["std"]
+                )
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
@@ -836,6 +922,7 @@ class Exp_Basic(object):
     def test(self):
         pass
 
+
 # MODEL COMPONENTS =====================================================================
 # Data Embedding
 class DSW_embedding(nn.Module):
@@ -852,9 +939,13 @@ class DSW_embedding(nn.Module):
     def forward(self, x):
         batch, ts_len, ts_dim = x.shape
 
-        x_segment = rearrange(x, 'b (seg_num seg_len) d -> (b d seg_num) seg_len', seg_len = self.seg_len)
+        x_segment = rearrange(
+            x, "b (seg_num seg_len) d -> (b d seg_num) seg_len", seg_len=self.seg_len
+        )
         x_embed = self.linear(x_segment)
-        x_embed = rearrange(x_embed, '(b d seg_num) d_model -> b d seg_num d_model', b = batch, d = ts_dim)
+        x_embed = rearrange(
+            x_embed, "(b d seg_num) d_model -> b d seg_num d_model", b=batch, d=ts_dim
+        )
 
         return x_embed
 
@@ -864,6 +955,7 @@ class FullAttention(nn.Module):
     """
     The Vanilla Attention operation
     """
+
     def __init__(self, scale=None, attention_dropout=0.1):
         super(FullAttention, self).__init__()
         self.scale = scale
@@ -872,7 +964,7 @@ class FullAttention(nn.Module):
     def forward(self, queries, keys, values):
         B, L, H, E = queries.shape
         _, S, _, D = values.shape
-        scale = self.scale or 1./sqrt(E)
+        scale = self.scale or 1.0 / sqrt(E)
 
         scores = torch.einsum("blhe,bshe->bhls", queries, keys)
         A = self.dropout(torch.softmax(scale * scores, dim=-1))
@@ -885,13 +977,14 @@ class AttentionLayer(nn.Module):
     """
     The Multi-head Self-Attention (MSA) Layer
     """
-    def __init__(self, d_model, n_heads, d_keys=None, d_values=None, dropout = 0.1):
+
+    def __init__(self, d_model, n_heads, d_keys=None, d_values=None, dropout=0.1):
         super(AttentionLayer, self).__init__()
 
-        d_keys = d_keys or (d_model//n_heads)
-        d_values = d_values or (d_model//n_heads)
+        d_keys = d_keys or (d_model // n_heads)
+        d_values = d_values or (d_model // n_heads)
 
-        self.inner_attention = FullAttention(scale=None, attention_dropout = dropout)
+        self.inner_attention = FullAttention(scale=None, attention_dropout=dropout)
         self.query_projection = nn.Linear(d_model, d_keys * n_heads)
         self.key_projection = nn.Linear(d_model, d_keys * n_heads)
         self.value_projection = nn.Linear(d_model, d_values * n_heads)
@@ -923,12 +1016,13 @@ class TwoStageAttentionLayer(nn.Module):
     The Two Stage Attention (TSA) Layer
     input/output shape: [batch_size, Data_dim(D), Seg_num(L), d_model]
     """
-    def __init__(self, seg_num, factor, d_model, n_heads, d_ff = None, dropout=0.1):
+
+    def __init__(self, seg_num, factor, d_model, n_heads, d_ff=None, dropout=0.1):
         super(TwoStageAttentionLayer, self).__init__()
-        d_ff = d_ff or 4*d_model
-        self.time_attention = AttentionLayer(d_model, n_heads, dropout = dropout)
-        self.dim_sender = AttentionLayer(d_model, n_heads, dropout = dropout)
-        self.dim_receiver = AttentionLayer(d_model, n_heads, dropout = dropout)
+        d_ff = d_ff or 4 * d_model
+        self.time_attention = AttentionLayer(d_model, n_heads, dropout=dropout)
+        self.dim_sender = AttentionLayer(d_model, n_heads, dropout=dropout)
+        self.dim_receiver = AttentionLayer(d_model, n_heads, dropout=dropout)
         self.router = nn.Parameter(torch.randn(seg_num, factor, d_model))
 
         self.dropout = nn.Dropout(dropout)
@@ -938,20 +1032,18 @@ class TwoStageAttentionLayer(nn.Module):
         self.norm3 = nn.LayerNorm(d_model)
         self.norm4 = nn.LayerNorm(d_model)
 
-        self.MLP1 = nn.Sequential(nn.Linear(d_model, d_ff),
-                                nn.GELU(),
-                                nn.Linear(d_ff, d_model))
-        self.MLP2 = nn.Sequential(nn.Linear(d_model, d_ff),
-                                nn.GELU(),
-                                nn.Linear(d_ff, d_model))
+        self.MLP1 = nn.Sequential(
+            nn.Linear(d_model, d_ff), nn.GELU(), nn.Linear(d_ff, d_model)
+        )
+        self.MLP2 = nn.Sequential(
+            nn.Linear(d_model, d_ff), nn.GELU(), nn.Linear(d_ff, d_model)
+        )
 
     def forward(self, x):
         # Cross Time Stage: Directly apply MSA to each dimension
         batch = x.shape[0]
-        time_in = rearrange(x, 'b ts_d seg_num d_model -> (b ts_d) seg_num d_model')
-        time_enc = self.time_attention(
-            time_in, time_in, time_in
-        )
+        time_in = rearrange(x, "b ts_d seg_num d_model -> (b ts_d) seg_num d_model")
+        time_enc = self.time_attention(time_in, time_in, time_in)
         dim_in = time_in + self.dropout(time_enc)
         dim_in = self.norm1(dim_in)
         dim_in = dim_in + self.dropout(self.MLP1(dim_in))
@@ -959,8 +1051,14 @@ class TwoStageAttentionLayer(nn.Module):
 
         # Cross Dimension Stage: use a small set of learnable vectors to aggregate and
         # distribute messages to build the D-to-D connection
-        dim_send = rearrange(dim_in, '(b ts_d) seg_num d_model -> (b seg_num) ts_d d_model', b = batch)
-        batch_router = repeat(self.router, 'seg_num factor d_model -> (repeat seg_num) factor d_model', repeat = batch)
+        dim_send = rearrange(
+            dim_in, "(b ts_d) seg_num d_model -> (b seg_num) ts_d d_model", b=batch
+        )
+        batch_router = repeat(
+            self.router,
+            "seg_num factor d_model -> (repeat seg_num) factor d_model",
+            repeat=batch,
+        )
         dim_buffer = self.dim_sender(batch_router, dim_send, dim_send)
         dim_receive = self.dim_receiver(dim_send, dim_buffer, dim_buffer)
         dim_enc = dim_send + self.dropout(dim_receive)
@@ -968,7 +1066,9 @@ class TwoStageAttentionLayer(nn.Module):
         dim_enc = dim_enc + self.dropout(self.MLP2(dim_enc))
         dim_enc = self.norm4(dim_enc)
 
-        final_out = rearrange(dim_enc, '(b seg_num) ts_d d_model -> b ts_d seg_num d_model', b = batch)
+        final_out = rearrange(
+            dim_enc, "(b seg_num) ts_d d_model -> b ts_d seg_num d_model", b=batch
+        )
 
         return final_out
 
@@ -996,11 +1096,11 @@ class SegMerging(nn.Module):
         pad_num = seg_num % self.win_size
         if pad_num != 0:
             pad_num = self.win_size - pad_num
-            x = torch.cat((x, x[:, :, -pad_num:, :]), dim = -2)
+            x = torch.cat((x, x[:, :, -pad_num:, :]), dim=-2)
 
         seg_to_merge = []
         for i in range(self.win_size):
-            seg_to_merge.append(x[:, :, i::self.win_size, :])
+            seg_to_merge.append(x[:, :, i :: self.win_size, :])
         x = torch.cat(seg_to_merge, -1)  # [B, ts_d, seg_num/win_size, win_size*d_model]
 
         x = self.norm(x)
@@ -1016,11 +1116,12 @@ class scale_block(nn.Module):
     We set depth = 1 in the paper
     """
 
-    def __init__(self, win_size, d_model, n_heads, d_ff, depth, dropout, \
-                    seg_num = 10, factor=10):
+    def __init__(
+        self, win_size, d_model, n_heads, d_ff, depth, dropout, seg_num=10, factor=10
+    ):
         super(scale_block, self).__init__()
 
-        if (win_size > 1):
+        if win_size > 1:
             self.merge_layer = SegMerging(d_model, win_size, nn.LayerNorm)
         else:
             self.merge_layer = None
@@ -1028,8 +1129,9 @@ class scale_block(nn.Module):
         self.encode_layers = nn.ModuleList()
 
         for i in range(depth):
-            self.encode_layers.append(TwoStageAttentionLayer(seg_num, factor, d_model, n_heads, \
-                                                        d_ff, dropout))
+            self.encode_layers.append(
+                TwoStageAttentionLayer(seg_num, factor, d_model, n_heads, d_ff, dropout)
+            )
 
     def forward(self, x):
         _, ts_dim, _, _ = x.shape
@@ -1048,16 +1150,39 @@ class Encoder(nn.Module):
     The Encoder of Crossformer.
     """
 
-    def __init__(self, e_blocks, win_size, d_model, n_heads, d_ff, block_depth, dropout,
-                in_seg_num = 10, factor=10):
+    def __init__(
+        self,
+        e_blocks,
+        win_size,
+        d_model,
+        n_heads,
+        d_ff,
+        block_depth,
+        dropout,
+        in_seg_num=10,
+        factor=10,
+    ):
         super(Encoder, self).__init__()
         self.encode_blocks = nn.ModuleList()
 
-        self.encode_blocks.append(scale_block(1, d_model, n_heads, d_ff, block_depth, dropout,\
-                                            in_seg_num, factor))
+        self.encode_blocks.append(
+            scale_block(
+                1, d_model, n_heads, d_ff, block_depth, dropout, in_seg_num, factor
+            )
+        )
         for i in range(1, e_blocks):
-            self.encode_blocks.append(scale_block(win_size, d_model, n_heads, d_ff, block_depth, dropout,\
-                                            ceil(in_seg_num/win_size**i), factor))
+            self.encode_blocks.append(
+                scale_block(
+                    win_size,
+                    d_model,
+                    n_heads,
+                    d_ff,
+                    block_depth,
+                    dropout,
+                    ceil(in_seg_num / win_size**i),
+                    factor,
+                )
+            )
 
     def forward(self, x):
         encode_x = []
@@ -1083,19 +1208,20 @@ class DecoderLayer(nn.Module):
         n_heads,
         d_ff=None,
         dropout=0.1,
-        out_seg_num = 10,
-        factor = 10,
+        out_seg_num=10,
+        factor=10,
     ):
         super(DecoderLayer, self).__init__()
-        self.self_attention = TwoStageAttentionLayer(out_seg_num, factor, d_model, n_heads, \
-                                d_ff, dropout)
-        self.cross_attention = AttentionLayer(d_model, n_heads, dropout = dropout)
+        self.self_attention = TwoStageAttentionLayer(
+            out_seg_num, factor, d_model, n_heads, d_ff, dropout
+        )
+        self.cross_attention = AttentionLayer(d_model, n_heads, dropout=dropout)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
-        self.MLP1 = nn.Sequential(nn.Linear(d_model, d_model),
-                                nn.GELU(),
-                                nn.Linear(d_model, d_model))
+        self.MLP1 = nn.Sequential(
+            nn.Linear(d_model, d_model), nn.GELU(), nn.Linear(d_model, d_model)
+        )
         self.linear_pred = nn.Linear(d_model, seg_len)
 
     def forward(self, x, cross):
@@ -1105,18 +1231,30 @@ class DecoderLayer(nn.Module):
         """
         batch = x.shape[0]
         x = self.self_attention(x)
-        x = rearrange(x, 'b ts_d out_seg_num d_model -> (b ts_d) out_seg_num d_model')
+        x = rearrange(x, "b ts_d out_seg_num d_model -> (b ts_d) out_seg_num d_model")
 
-        cross = rearrange(cross, 'b ts_d in_seg_num d_model -> (b ts_d) in_seg_num d_model')
-        tmp = self.cross_attention(x, cross, cross,)
+        cross = rearrange(
+            cross, "b ts_d in_seg_num d_model -> (b ts_d) in_seg_num d_model"
+        )
+        tmp = self.cross_attention(
+            x,
+            cross,
+            cross,
+        )
         x = x + self.dropout(tmp)
         y = x = self.norm1(x)
         y = self.MLP1(y)
-        dec_output = self.norm2(x+y)
+        dec_output = self.norm2(x + y)
 
-        dec_output = rearrange(dec_output, '(b ts_d) seg_dec_num d_model -> b ts_d seg_dec_num d_model', b = batch)
+        dec_output = rearrange(
+            dec_output,
+            "(b ts_d) seg_dec_num d_model -> b ts_d seg_dec_num d_model",
+            b=batch,
+        )
         layer_predict = self.linear_pred(dec_output)
-        layer_predict = rearrange(layer_predict, 'b out_d seg_num seg_len -> b (out_d seg_num) seg_len')
+        layer_predict = rearrange(
+            layer_predict, "b out_d seg_num seg_len -> b (out_d seg_num) seg_len"
+        )
 
         return dec_output, layer_predict
 
@@ -1126,15 +1264,28 @@ class Decoder(nn.Module):
     The decoder of Crossformer, making the final prediction by adding up predictions at each scale
     """
 
-    def __init__(self, seg_len, d_layers, d_model, n_heads, d_ff, dropout,\
-                router=False, out_seg_num = 10, factor=10):
+    def __init__(
+        self,
+        seg_len,
+        d_layers,
+        d_model,
+        n_heads,
+        d_ff,
+        dropout,
+        router=False,
+        out_seg_num=10,
+        factor=10,
+    ):
         super(Decoder, self).__init__()
 
         self.router = router
         self.decode_layers = nn.ModuleList()
         for i in range(d_layers):
-            self.decode_layers.append(DecoderLayer(seg_len, d_model, n_heads, d_ff, dropout, \
-                                        out_seg_num, factor))
+            self.decode_layers.append(
+                DecoderLayer(
+                    seg_len, d_model, n_heads, d_ff, dropout, out_seg_num, factor
+                )
+            )
 
     def forward(self, x, cross):
         final_predict = None
@@ -1143,14 +1294,18 @@ class Decoder(nn.Module):
         ts_d = x.shape[1]
         for layer in self.decode_layers:
             cross_enc = cross[i]
-            x, layer_predict = layer(x,  cross_enc)
+            x, layer_predict = layer(x, cross_enc)
             if final_predict is None:
                 final_predict = layer_predict
             else:
                 final_predict = final_predict + layer_predict
             i += 1
 
-        final_predict = rearrange(final_predict, 'b (out_d seg_num) seg_len -> b (seg_num seg_len) out_d', out_d = ts_d)
+        final_predict = rearrange(
+            final_predict,
+            "b (out_d seg_num) seg_len -> b (seg_num seg_len) out_d",
+            out_d=ts_d,
+        )
 
         return final_predict
 
@@ -1158,9 +1313,22 @@ class Decoder(nn.Module):
 # Enitre crossformer
 class Crossformer(nn.Module):
 
-    def __init__(self, data_dim, seq_len, pred_len, seg_len, win_size = 2,
-                factor=10, d_model=512, d_ff = 1024, n_heads=8, e_layers=3,
-                dropout=0.0, baseline = False, device=torch.device('cuda:0')):
+    def __init__(
+        self,
+        data_dim,
+        seq_len,
+        pred_len,
+        seg_len,
+        win_size=2,
+        factor=10,
+        d_model=512,
+        d_ff=1024,
+        n_heads=8,
+        e_layers=3,
+        dropout=0.0,
+        baseline=False,
+        device=torch.device("cuda:0"),
+    ):
         super(Crossformer, self).__init__()
         self.data_dim = data_dim
         self.seq_len = seq_len
@@ -1180,26 +1348,49 @@ class Crossformer(nn.Module):
 
         # Embedding
         self.enc_value_embedding = DSW_embedding(seg_len, d_model)
-        self.enc_pos_embedding = nn.Parameter(torch.randn(1, data_dim, (self.pad_seq_len // seg_len), d_model))
+        self.enc_pos_embedding = nn.Parameter(
+            torch.randn(1, data_dim, (self.pad_seq_len // seg_len), d_model)
+        )
         self.pre_norm = nn.LayerNorm(d_model)
 
         # Encoder
-        self.encoder = Encoder(e_layers, win_size, d_model, n_heads, d_ff, block_depth = 1, \
-                                    dropout = dropout,in_seg_num = (self.pad_seq_len // seg_len), factor = factor)
+        self.encoder = Encoder(
+            e_layers,
+            win_size,
+            d_model,
+            n_heads,
+            d_ff,
+            block_depth=1,
+            dropout=dropout,
+            in_seg_num=(self.pad_seq_len // seg_len),
+            factor=factor,
+        )
 
         # Decoder
-        self.dec_pos_embedding = nn.Parameter(torch.randn(1, data_dim, (self.pad_pred_len // seg_len), d_model))
-        self.decoder = Decoder(seg_len, e_layers + 1, d_model, n_heads, d_ff, dropout, \
-                                    out_seg_num = (self.pad_pred_len // seg_len), factor = factor)
+        self.dec_pos_embedding = nn.Parameter(
+            torch.randn(1, data_dim, (self.pad_pred_len // seg_len), d_model)
+        )
+        self.decoder = Decoder(
+            seg_len,
+            e_layers + 1,
+            d_model,
+            n_heads,
+            d_ff,
+            dropout,
+            out_seg_num=(self.pad_pred_len // seg_len),
+            factor=factor,
+        )
 
     def forward(self, x_seq):
-        if (self.baseline):
-            base = x_seq.mean(dim = 1, keepdim = True)
+        if self.baseline:
+            base = x_seq.mean(dim=1, keepdim=True)
         else:
             base = 0
         batch_size = x_seq.shape[0]
-        if (self.seq_len_add != 0):
-            x_seq = torch.cat((x_seq[:, :1, :].expand(-1, self.seq_len_add, -1), x_seq), dim = 1)
+        if self.seq_len_add != 0:
+            x_seq = torch.cat(
+                (x_seq[:, :1, :].expand(-1, self.seq_len_add, -1), x_seq), dim=1
+            )
 
         x_seq = self.enc_value_embedding(x_seq)
         x_seq += self.enc_pos_embedding
@@ -1207,10 +1398,14 @@ class Crossformer(nn.Module):
 
         enc_out = self.encoder(x_seq)
 
-        dec_in = repeat(self.dec_pos_embedding, 'b ts_d l d -> (repeat b) ts_d l d', repeat = batch_size)
+        dec_in = repeat(
+            self.dec_pos_embedding,
+            "b ts_d l d -> (repeat b) ts_d l d",
+            repeat=batch_size,
+        )
         predict_y = self.decoder(dec_in, enc_out)
 
-        return base + predict_y[:, :self.pred_len, :]
+        return base + predict_y[:, : self.pred_len, :]
 
 
 # Learning Rate Decay
@@ -1218,21 +1413,29 @@ def adjust_learning_rate(optimizer, epoch, args):
     """
     Helper function for learning rate decay
     """
-    if args.lradj=='type1':
-        lr_adjust = {2: args.learning_rate * 0.5 ** 1, 4: args.learning_rate * 0.5 ** 2,
-                     6: args.learning_rate * 0.5 ** 3, 8: args.learning_rate * 0.5 ** 4,
-                     10: args.learning_rate * 0.5 ** 5}
-    elif args.lradj=='type2':
-        lr_adjust = {5: args.learning_rate * 0.5 ** 1, 10: args.learning_rate * 0.5 ** 2,
-                     15: args.learning_rate * 0.5 ** 3, 20: args.learning_rate * 0.5 ** 4,
-                     25: args.learning_rate * 0.5 ** 5}
+    if args.lradj == "type1":
+        lr_adjust = {
+            2: args.learning_rate * 0.5**1,
+            4: args.learning_rate * 0.5**2,
+            6: args.learning_rate * 0.5**3,
+            8: args.learning_rate * 0.5**4,
+            10: args.learning_rate * 0.5**5,
+        }
+    elif args.lradj == "type2":
+        lr_adjust = {
+            5: args.learning_rate * 0.5**1,
+            10: args.learning_rate * 0.5**2,
+            15: args.learning_rate * 0.5**3,
+            20: args.learning_rate * 0.5**4,
+            25: args.learning_rate * 0.5**5,
+        }
     else:
         lr_adjust = {}
     if epoch in lr_adjust.keys():
         lr = lr_adjust[epoch]
         for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
-        print('Updating learning rate to {}'.format(lr))
+            param_group["lr"] = lr
+        print("Updating learning rate to {}".format(lr))
 
 
 # Early Stopping
@@ -1253,7 +1456,7 @@ class EarlyStopping:
             self.save_checkpoint(val_loss, model, path)
         elif score < self.best_score + self.delta:
             self.counter += 1
-            print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            print(f"EarlyStopping counter: {self.counter} out of {self.patience}")
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
@@ -1263,8 +1466,10 @@ class EarlyStopping:
 
     def save_checkpoint(self, val_loss, model, path):
         if self.verbose:
-            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-        torch.save(model.state_dict(), path+'/'+'checkpoint.pth')
+            print(
+                f"Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ..."
+            )
+        torch.save(model.state_dict(), path + "/" + "checkpoint.pth")
         self.val_loss_min = val_loss
 
 
@@ -1274,8 +1479,10 @@ class Exp_crossformer(Exp_Basic):
     Exp_Crossformer is the main class for the Crossformer architecture, which wraps up
     every component above.
     """
+
     def __init__(self, args):
         super(Exp_crossformer, self).__init__(args)
+
     # in/out convention changed to seq_len, pred_len
     def _build_model(self):
         model = Crossformer(
@@ -1291,7 +1498,7 @@ class Exp_crossformer(Exp_Basic):
             self.args.e_layers,
             self.args.dropout,
             self.args.baseline,
-            self.device
+            self.device,
         ).float()
 
         if self.args.use_multi_gpu and self.args.use_gpu:
@@ -1301,24 +1508,27 @@ class Exp_crossformer(Exp_Basic):
     def _get_data(self, flag):
         args = self.args
 
-
         data_dict = {
-            'ETTh1': Dataset_ETT_hour,
-            'SYNTHh1': Dataset_SYNTH_hour,
-            'SYNTHh2': Dataset_SYNTH_hour,
-            'SYNTH_additive': Dataset_SYNTH_additive,
-            'SYNTH_additive_reversal': Dataset_SYNTH_additive_reversal,
-            'SYNTH_multiplicative': Dataset_SYNTH_multiplicative,
-            'SYNTH_multiplicative_reversal': Dataset_SYNTH_multiplicative_reversal,
-            'DEWINDh_small': Dataset_WIND_hour,
+            "ETTh1": Dataset_ETT_hour,
+            "SYNTHh1": Dataset_SYNTH_hour,
+            "SYNTHh2": Dataset_SYNTH_hour,
+            "SYNTH_additive": Dataset_SYNTH_additive,
+            "SYNTH_additive_reversal": Dataset_SYNTH_additive_reversal,
+            "SYNTH_multiplicative": Dataset_SYNTH_multiplicative,
+            "SYNTH_multiplicative_reversal": Dataset_SYNTH_multiplicative_reversal,
+            "DEWINDh_small": Dataset_WIND_hour,
         }
 
         Data = data_dict[self.args.data]
 
-        if flag == 'test':
-            shuffle_flag = False; drop_last = True; batch_size = args.batch_size;
+        if flag == "test":
+            shuffle_flag = False
+            drop_last = True
+            batch_size = args.batch_size
         else:
-            shuffle_flag = True; drop_last = True; batch_size = args.batch_size;
+            shuffle_flag = True
+            drop_last = True
+            batch_size = args.batch_size
 
         data_set = Data(
             root_path=args.root_path,
@@ -1326,7 +1536,7 @@ class Exp_crossformer(Exp_Basic):
             flag=flag,
             size=[args.seq_len, args.pred_len],
             inverse=args.inverse,
-            data_split = args.data_split,
+            data_split=args.data_split,
         )
 
         print(flag, len(data_set))
@@ -1335,7 +1545,8 @@ class Exp_crossformer(Exp_Basic):
             batch_size=batch_size,
             shuffle=shuffle_flag,
             num_workers=args.num_workers,
-            drop_last=drop_last)
+            drop_last=drop_last,
+        )
 
         return data_set, data_loader
 
@@ -1350,16 +1561,15 @@ class Exp_crossformer(Exp_Basic):
         """
         Sets up MSE loss.
         """
-        criterion =  nn.MSELoss()
+        criterion = nn.MSELoss()
         return criterion
 
     def vali(self, vali_data, vali_loader, criterion):
         self.model.eval()
         total_loss = []
         with torch.no_grad():
-            for i, (batch_x,batch_y) in enumerate(vali_loader):
-                pred, true = self._process_one_batch(
-                    vali_data, batch_x, batch_y)
+            for i, (batch_x, batch_y) in enumerate(vali_loader):
+                pred, true = self._process_one_batch(vali_data, batch_x, batch_y)
                 loss = criterion(pred.detach().cpu(), true.detach().cpu())
                 total_loss.append(loss.detach().item())
         total_loss = np.average(total_loss)
@@ -1367,17 +1577,17 @@ class Exp_crossformer(Exp_Basic):
         return total_loss
 
     def train(self, setting):
-        train_data, train_loader = self._get_data(flag = 'train')
-        vali_data, vali_loader = self._get_data(flag = 'val')
-        test_data, test_loader = self._get_data(flag = 'test')
+        train_data, train_loader = self._get_data(flag="train")
+        vali_data, vali_loader = self._get_data(flag="val")
+        test_data, test_loader = self._get_data(flag="test")
 
         path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(path):
             os.makedirs(path)
-        with open(os.path.join(path, "args.json"), 'w') as f:
+        with open(os.path.join(path, "args.json"), "w") as f:
             json.dump(vars(self.args), f, indent=True)
-        scale_statistic = {'mean': train_data.scaler.mean, 'std': train_data.scaler.std}
-        with open(os.path.join(path, "scale_statistic.pkl"), 'wb') as f:
+        scale_statistic = {"mean": train_data.scaler.mean, "std": train_data.scaler.std}
+        with open(os.path.join(path, "scale_statistic.pkl"), "wb") as f:
             pickle.dump(scale_statistic, f)
 
         train_steps = len(train_loader)
@@ -1393,44 +1603,60 @@ class Exp_crossformer(Exp_Basic):
 
             self.model.train()
             epoch_time = time.time()
-            for i, (batch_x,batch_y) in enumerate(train_loader):
+            for i, (batch_x, batch_y) in enumerate(train_loader):
                 iter_count += 1
 
                 model_optim.zero_grad()
-                pred, true = self._process_one_batch(
-                    train_data, batch_x, batch_y)
+                pred, true = self._process_one_batch(train_data, batch_x, batch_y)
                 loss = criterion(pred, true)
                 train_loss.append(loss.item())
 
-                if (i+1) % 100==0:
-                    print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
-                    speed = (time.time()-time_now)/iter_count
-                    left_time = speed*((self.args.train_epochs - epoch)*train_steps - i)
-                    print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
+                if (i + 1) % 100 == 0:
+                    print(
+                        "\titers: {0}, epoch: {1} | loss: {2:.7f}".format(
+                            i + 1, epoch + 1, loss.item()
+                        )
+                    )
+                    speed = (time.time() - time_now) / iter_count
+                    left_time = speed * (
+                        (self.args.train_epochs - epoch) * train_steps - i
+                    )
+                    print(
+                        "\tspeed: {:.4f}s/iter; left time: {:.4f}s".format(
+                            speed, left_time
+                        )
+                    )
                     iter_count = 0
                     time_now = time.time()
 
                 loss.backward()
                 model_optim.step()
 
-            print("Epoch: {} cost time: {}".format(epoch+1, time.time()-epoch_time))
+            print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
             vali_loss = self.vali(vali_data, vali_loader, criterion)
             test_loss = self.vali(test_data, test_loader, criterion)
 
-            print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
-                epoch + 1, train_steps, train_loss, vali_loss, test_loss))
+            print(
+                "Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
+                    epoch + 1, train_steps, train_loss, vali_loss, test_loss
+                )
+            )
             early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
 
-            adjust_learning_rate(model_optim, epoch+1, self.args)
+            adjust_learning_rate(model_optim, epoch + 1, self.args)
 
-        best_model_path = path+'/'+'checkpoint.pth'
+        best_model_path = path + "/" + "checkpoint.pth"
         self.model.load_state_dict(torch.load(best_model_path))
-        state_dict = self.model.module.state_dict() if isinstance(self.model, DataParallel) else self.model.state_dict()
-        torch.save(state_dict, path+'/'+'checkpoint.pth')
+        state_dict = (
+            self.model.module.state_dict()
+            if isinstance(self.model, DataParallel)
+            else self.model.state_dict()
+        )
+        torch.save(state_dict, path + "/" + "checkpoint.pth")
 
         return self.model
 
@@ -1441,7 +1667,7 @@ class Exp_crossformer(Exp_Basic):
         possible trouble shooting.
         We also added returns to the testing function.
         """
-        test_data, test_loader = self._get_data(flag='test')
+        test_data, test_loader = self._get_data(flag="test")
 
         self.model.eval()
 
@@ -1451,50 +1677,52 @@ class Exp_crossformer(Exp_Basic):
         instance_num = 0
 
         with torch.no_grad():
-            for i, (batch_x,batch_y) in enumerate(test_loader):
+            for i, (batch_x, batch_y) in enumerate(test_loader):
                 # NOTE for possible debug
-                first_batch_test = {
-                    'batch_x': batch_x,
-                    'batch_y': batch_y
-                }
+                first_batch_test = {"batch_x": batch_x, "batch_y": batch_y}
 
                 pred, true = self._process_one_batch(
-                    test_data, batch_x, batch_y, inverse)
+                    test_data, batch_x, batch_y, inverse
+                )
                 ### Changed if save preds logic to info/auto logic
                 preds.append(pred.detach().cpu().numpy())
                 trues.append(true.detach().cpu().numpy())
 
                 batch_size = pred.shape[0]
                 instance_num += batch_size
-                batch_metric = np.array(metric(pred.detach().cpu().numpy(), true.detach().cpu().numpy())) * batch_size
+                batch_metric = (
+                    np.array(
+                        metric(pred.detach().cpu().numpy(), true.detach().cpu().numpy())
+                    )
+                    * batch_size
+                )
                 metrics_all.append(batch_metric)
 
-
-        metrics_all = np.stack(metrics_all, axis = 0)
-        metrics_mean = metrics_all.sum(axis = 0) / instance_num
+        metrics_all = np.stack(metrics_all, axis=0)
+        metrics_mean = metrics_all.sum(axis=0) / instance_num
 
         preds = np.array(preds)
         trues = np.array(trues)
-        print('test shape:', preds.shape, trues.shape)
+        print("test shape:", preds.shape, trues.shape)
         preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
         trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
-        print('test shape:', preds.shape, trues.shape)
+        print("test shape:", preds.shape, trues.shape)
 
         # result save
-        folder_path = './results/' + setting + '/'
+        folder_path = "./results/" + setting + "/"
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
         mae, mse, rmse, mape, mspe = metrics_mean
-        print('mse:{}, mae:{}'.format(mse, mae))
+        print("mse:{}, mae:{}".format(mse, mae))
 
         # Explicitly define all metrics
         all_metrics = np.array([mae, mse, rmse, mape, mspe])
 
-        np.save(folder_path+'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
-        if (save_pred):
-            np.save(folder_path+'pred.npy', preds)
-            np.save(folder_path+'true.npy', trues)
+        np.save(folder_path + "metrics.npy", np.array([mae, mse, rmse, mape, mspe]))
+        if save_pred:
+            np.save(folder_path + "pred.npy", preds)
+            np.save(folder_path + "true.npy", trues)
 
         # Added returns
         return preds, trues, mse, mae, mape, all_metrics, first_batch_test
@@ -1524,7 +1752,7 @@ class Exp_crossformer(Exp_Basic):
             "SYNTH_additive_reversal": Dataset_SYNTH_additive_reversal,
             "SYNTH_multiplicative": Dataset_SYNTH_multiplicative,
             "SYNTH_multiplicative_reversal": Dataset_SYNTH_multiplicative_reversal,
-            "DEWINDh_small": Dataset_WIND_hour
+            "DEWINDh_small": Dataset_WIND_hour,
         }
 
         # NOTE added the Data variable
@@ -1766,17 +1994,19 @@ class CrossformerTS:
         print("=" * 150)
 
         Experiment_Model = Exp_crossformer
-        self.setting = "Crossformer_{}_il{}_pl{}_sl{}_win{}_fa{}_dm{}_nh{}_el{}_iter{}".format(
-            self.args.data,
-            self.args.seq_len,
-            self.args.pred_len,
-            self.args.seg_len,
-            self.args.win_size,
-            self.args.factor,
-            self.args.d_model,
-            self.args.n_heads,
-            self.args.e_layers,
-            self.args.iter,
+        self.setting = (
+            "Crossformer_{}_il{}_pl{}_sl{}_win{}_fa{}_dm{}_nh{}_el{}_iter{}".format(
+                self.args.data,
+                self.args.seq_len,
+                self.args.pred_len,
+                self.args.seg_len,
+                self.args.win_size,
+                self.args.factor,
+                self.args.d_model,
+                self.args.n_heads,
+                self.args.e_layers,
+                self.args.iter,
+            )
         )
         # Initialize model class
         self.experiment_model = Experiment_Model(self.args)
