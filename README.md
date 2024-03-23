@@ -35,6 +35,16 @@
 
 ## For Transparency
 
+### Datasets Used in Experiments
+
+- `SYNTHDataset/SYNTHh1.csv`
+- `SYNTHDataset/SYNTH_additive.csv`
+- `SYNTHDataset/SYNTH_additive_reversal.csv`
+- `SYNTHDataset/SYNTH_multiplicative.csv`
+- `SYNTHDataset/SYNTH_multiplicative_reversal.csv`
+- `WINDataset/DEWINDh_small.csv`
+- `ETTDataset/ETTh1.csv`
+
 ### Model Training and Forecasting Logs
 
 - `new_forecast_notebook.ipynb`
