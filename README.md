@@ -4,12 +4,12 @@
 
 ### Entire Models Alongside our User-Friendly Wrappers for Training
 
-- `TransformerModels/AutoformerAPI.py`
-- `TransformerModels/CrossformerAPI.py`
-- `TransformerModels/FedformerAPI.py`
-- `TransformerModels/InformerAPI.py`
-- `TransformerModels/LogSparseAPI.py`
-- `TransformerModels/TSMixerAPI.py`
+- `TransformersModels/AutoformerAPI.py`
+- `TransformersModels/CrossformerAPI.py`
+- `TransformersModels/FedformerAPI.py`
+- `TransformersModels/InformerAPI.py`
+- `TransformersModels/LogSparseAPI.py`
+- `TransformersModels/TSMixerAPI.py`
 
 ### Synythetic Data Framework
 
