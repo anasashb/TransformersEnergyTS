@@ -5,3 +5,4 @@ reformer-pytorch==1.4.3
 torch==2.1.0
 tqdm==4.62.2
 einops==0.7.0
+tensorflow==2.12.0
