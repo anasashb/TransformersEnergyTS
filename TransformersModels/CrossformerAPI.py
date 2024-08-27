@@ -476,7 +476,6 @@ class Dataset_SYNTH_additive(Dataset):
         inverse=False,
         scale_statistic=None,
     ):
-
         if size == None:
             self.seq_len = 24 * 4 * 4
             self.pred_len = 24 * 4
@@ -585,7 +584,6 @@ class Dataset_SYNTH_additive_reversal(Dataset):
         inverse=False,
         scale_statistic=None,
     ):
-
         if size == None:
             self.seq_len = 24 * 4 * 4
             self.pred_len = 24 * 4
@@ -691,7 +689,6 @@ class Dataset_SYNTH_multiplicative(Dataset):
         inverse=False,
         scale_statistic=None,
     ):
-
         if size == None:
             self.seq_len = 24 * 4 * 4
             self.pred_len = 24 * 4
@@ -795,7 +792,6 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
         inverse=False,
         scale_statistic=None,
     ):
-
         if size == None:
             self.seq_len = 24 * 4 * 4
             self.pred_len = 24 * 4
@@ -1312,7 +1308,6 @@ class Decoder(nn.Module):
 
 # Enitre crossformer
 class Crossformer(nn.Module):
-
     def __init__(
         self,
         data_dim,

@@ -1,7 +1,8 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
 import random
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from statsmodels.tsa.stattools import adfuller
 
 
@@ -186,7 +187,7 @@ class SynthesisTS:
                 else:
                     current_rate = trend_rate
                     # Invert trend rate
-            y[i] = y[i] * ((current_rate ** i))
+            y[i] = y[i] * ((current_rate**i))
 
         result_df = pd.DataFrame({"TARGET": y.squeeze()}, index=df.index)
 

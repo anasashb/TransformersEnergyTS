@@ -1,157 +1,181 @@
 # A script file to easily and convinently run and use the Autoformer model. Includes a wrapper class for the model that can be imported and easily used for training and prediction.
 
 # Imports
-from typing import List
+import math
 import os
 import time
+from math import sqrt
+from typing import List
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import math
-from math import sqrt
-plt.switch_backend('agg')
-from pandas.tseries import offsets
-from pandas.tseries.frequencies import to_offset
-import torch
-from torch import optim
-from torch.utils.data import Dataset, DataLoader
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.nn.utils import weight_norm
-from sklearn.preprocessing import StandardScaler
-from reformer_pytorch import LSHSelfAttention
+
+plt.switch_backend("agg")
 import argparse
 import warnings
-warnings.filterwarnings('ignore')
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from pandas.tseries import offsets
+from pandas.tseries.frequencies import to_offset
+from reformer_pytorch import LSHSelfAttention
+from sklearn.preprocessing import StandardScaler
+from torch import optim
+from torch.nn.utils import weight_norm
+from torch.utils.data import DataLoader, Dataset
+
+warnings.filterwarnings("ignore")
 import logging
-logging.basicConfig(format='%(asctime)s,%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
-    datefmt='%Y-%m-%d:%H:%M:%S',
-    level=logging.INFO)
 
-
+logging.basicConfig(
+    format="%(asctime)s,%(msecs)03d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s",
+    datefmt="%Y-%m-%d:%H:%M:%S",
+    level=logging.INFO,
+)
 
 
 ###########################################################################################################################
 # Dot dictionary ##########################################################################################################
 class dotdict(dict):
-    '''
+    """
     Simple class to allow storing model arguments in a dot dictionary.
-    '''
+    """
+
     __getattr__ = dict.get
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
+
 ###########################################################################################################################
 # Metrics #################################################################################################################
 
+
 def RSE(pred, true):
-    '''
+    """
     Calculates relative quared error.
-    '''
-    return np.sqrt(np.sum((true-pred)**2)) / np.sqrt(np.sum((true-true.mean())**2))
+    """
+    return np.sqrt(np.sum((true - pred) ** 2)) / np.sqrt(
+        np.sum((true - true.mean()) ** 2)
+    )
+
 
 def CORR(pred, true):
-    '''
+    """
     Calculates correlation coefficient.
-    '''
-    u = ((true-true.mean(0))*(pred-pred.mean(0))).sum(0) 
-    d = np.sqrt(((true-true.mean(0))**2*(pred-pred.mean(0))**2).sum(0))
-    return (u/d).mean(-1)
+    """
+    u = ((true - true.mean(0)) * (pred - pred.mean(0))).sum(0)
+    d = np.sqrt(((true - true.mean(0)) ** 2 * (pred - pred.mean(0)) ** 2).sum(0))
+    return (u / d).mean(-1)
+
 
 def MAE(pred, true):
-    '''
+    """
     Calculates mean absolute error.
-    '''
-    return np.mean(np.abs(pred-true))
+    """
+    return np.mean(np.abs(pred - true))
+
 
 def MSE(pred, true):
-    '''
+    """
     Calculates mean squared error.
-    '''
-    return np.mean((pred-true)**2)
+    """
+    return np.mean((pred - true) ** 2)
+
 
 def RMSE(pred, true):
-    '''
+    """
     Calculates root mean suared error.
-    '''
+    """
     return np.sqrt(MSE(pred, true))
 
+
 def MAPE(pred, true):
-    '''
+    """
     Calculates mean absolute percentage error.
-    '''
+    """
     return np.mean(np.abs((pred - true) / true))
 
+
 def MSPE(pred, true):
-    '''
+    """
     Calculates mean squared percentage error.
-    '''
+    """
     return np.mean(np.square((pred - true) / true))
 
+
 def metric(pred, true):
-    '''
+    """
     Wraps up metric functions, calculates and returns all.
-    '''
+    """
     mae = MAE(pred, true)
     mse = MSE(pred, true)
     rmse = RMSE(pred, true)
     mape = MAPE(pred, true)
     mspe = MSPE(pred, true)
-    
-    return mae,mse,rmse,mape,mspe
 
-### Commented out as is not used in the code.
-#class StandardScaler():
-    '''
+    return mae, mse, rmse, mape, mspe
+
+    ### Commented out as is not used in the code.
+    # class StandardScaler():
+    """
     Straightforward StandardScaler class.
     Methods included are '.fit()', '.transform()', '.inverse_transform().'
-    '''
-   # def __init__(self, mean, std):
-        #self.mean = mean
-        #self.std = std
+    """
 
-    #def transform(self, data):
-        #return (data - self.mean) / self.std
 
-    #def inverse_transform(self, data):
-        #return (data * self.std) + self.mean
+# def __init__(self, mean, std):
+# self.mean = mean
+# self.std = std
+
+# def transform(self, data):
+# return (data - self.mean) / self.std
+
+# def inverse_transform(self, data):
+# return (data * self.std) + self.mean
+
 
 ###########################################################################################################################
 # Masking #################################################################################################################
-class ProbMask():
-    '''
+class ProbMask:
+    """
     Class for probabilistic masking used in the Autoformer framework instead of vanilla Transformer's triangular masking.
-    '''
+    """
+
     def __init__(self, B, H, L, index, scores, device="cpu"):
         _mask = torch.ones(L, scores.shape[-1], dtype=torch.bool).to(device).triu(1)
         _mask_ex = _mask[None, None, :].expand(B, H, L, scores.shape[-1])
-        indicator = _mask_ex[torch.arange(B)[:, None, None],
-                             torch.arange(H)[None, :, None],
-                             index, :].to(device)
+        indicator = _mask_ex[
+            torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], index, :
+        ].to(device)
         self._mask = indicator.view(scores.shape).to(device)
-    
+
     @property
     def mask(self):
         return self._mask
-    
 
 
-class TriangularCausalMask():
-    '''
-    Class for triangular masking used with Vanilla transformers. 
-    '''
+class TriangularCausalMask:
+    """
+    Class for triangular masking used with Vanilla transformers.
+    """
+
     def __init__(self, B, L, device="cpu"):
         mask_shape = [B, 1, L, L]
         with torch.no_grad():
-            self._mask = torch.triu(torch.ones(mask_shape, dtype=torch.bool), diagonal=1).to(device)
+            self._mask = torch.triu(
+                torch.ones(mask_shape, dtype=torch.bool), diagonal=1
+            ).to(device)
 
     @property
     def mask(self):
         return self._mask
-    
+
 
 ###########################################################################################################################
 # Time Features #############################################################################################################
+
 
 class TimeFeature:
     def __init__(self):
@@ -211,6 +235,7 @@ class MonthOfYear(TimeFeature):
 
     def __call__(self, index: pd.DatetimeIndex) -> np.ndarray:
         return (index.month - 1) / 11.0 - 0.5
+
 
 ## !!!Here we have a difference!!!
 class WeekOfYear(TimeFeature):
@@ -276,10 +301,12 @@ def time_features_from_frequency_str(freq_str: str) -> List[TimeFeature]:
     """
     raise RuntimeError(supported_freq_msg)
 
+
 ###########################################################################################################################
 # Timestamps ##############################################################################################################
 
-def time_features(dates, freq='h'):
+
+def time_features(dates, freq="h"):
     """
     > `time_features` takes in a `dates` dataframe with a 'dates' column and extracts the date down to `freq` where freq can be any of the following:
      > * Q - [month]
@@ -293,13 +320,24 @@ def time_features(dates, freq='h'):
     """
     return np.vstack([feat(dates) for feat in time_features_from_frequency_str(freq)])
 
+
 ###########################################################################################################################
 # Data loaders #################################################################################################
 
+
 class Dataset_ETT_hour(Dataset):
-    def __init__(self, root_path, flag='train', size=None,
-                 features='M', data_path='ETTh1.csv',
-                 target='OT', scale=True, timeenc=0, freq='h'):
+    def __init__(
+        self,
+        root_path,
+        flag="train",
+        size=None,
+        features="M",
+        data_path="ETTh1.csv",
+        target="OT",
+        scale=True,
+        timeenc=0,
+        freq="h",
+    ):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
@@ -311,8 +349,8 @@ class Dataset_ETT_hour(Dataset):
             self.label_len = size[1]
             self.pred_len = size[2]
         # init
-        assert flag in ['train', 'test', 'val']
-        type_map = {'train': 0, 'val': 1, 'test': 2}
+        assert flag in ["train", "test", "val"]
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
 
         self.features = features
@@ -327,37 +365,46 @@ class Dataset_ETT_hour(Dataset):
 
     def __read_data__(self):
         self.scaler = StandardScaler()
-        df_raw = pd.read_csv(os.path.join(self.root_path,
-                                          self.data_path))
+        df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
 
-        border1s = [0, 12 * 30 * 24 - self.seq_len, 12 * 30 * 24 + 4 * 30 * 24 - self.seq_len]
-        border2s = [12 * 30 * 24, 12 * 30 * 24 + 4 * 30 * 24, 12 * 30 * 24 + 8 * 30 * 24]
+        border1s = [
+            0,
+            12 * 30 * 24 - self.seq_len,
+            12 * 30 * 24 + 4 * 30 * 24 - self.seq_len,
+        ]
+        border2s = [
+            12 * 30 * 24,
+            12 * 30 * 24 + 4 * 30 * 24,
+            12 * 30 * 24 + 8 * 30 * 24,
+        ]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
 
-        if self.features == 'M' or self.features == 'MS':
+        if self.features == "M" or self.features == "MS":
             cols_data = df_raw.columns[1:]
             df_data = df_raw[cols_data]
-        elif self.features == 'S':
+        elif self.features == "S":
             df_data = df_raw[[self.target]]
 
         if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
+            train_data = df_data[border1s[0] : border2s[0]]
             self.scaler.fit(train_data.values)
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
 
-        df_stamp = df_raw[['date']][border1:border2]
-        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        df_stamp = df_raw[["date"]][border1:border2]
+        df_stamp["date"] = pd.to_datetime(df_stamp.date)
         if self.timeenc == 0:
-            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
-            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
-            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
-            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
-            data_stamp = df_stamp.drop(['date'], 1).values
+            df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp["weekday"] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp["hour"] = df_stamp.date.apply(lambda row: row.hour, 1)
+            data_stamp = df_stamp.drop(["date"], 1).values
         elif self.timeenc == 1:
-            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = time_features(
+                pd.to_datetime(df_stamp["date"].values), freq=self.freq
+            )
             data_stamp = data_stamp.transpose(1, 0)
 
         self.data_x = data[border1:border2]
@@ -382,76 +429,100 @@ class Dataset_ETT_hour(Dataset):
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
+
 
 class Dataset_WIND_hour(Dataset):
-    '''
+    """
     PyTorch dataloader class for the wind dataset, which constitutes a minor amendment of the original Autoformer dataloader for the ETT hourly.
-    Class comprehensively handles the train-val-test split, scaling, time-feature encoding. Further included (but unused at this point) method allows for reverse scaling. 
-    '''
-    def __init__(self, root_path, flag='train', size=None, 
-                 features='S', data_path='DEWINDh_small.csv', 
-                 target='TARGET', scale=True, inverse=False, timeenc=0, freq='h', cols=None):
+    Class comprehensively handles the train-val-test split, scaling, time-feature encoding. Further included (but unused at this point) method allows for reverse scaling.
+    """
+
+    def __init__(
+        self,
+        root_path,
+        flag="train",
+        size=None,
+        features="S",
+        data_path="DEWINDh_small.csv",
+        target="TARGET",
+        scale=True,
+        inverse=False,
+        timeenc=0,
+        freq="h",
+        cols=None,
+    ):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
-            self.seq_len = 24*4*4
-            self.label_len = 24*4
-            self.pred_len = 24*4
+            self.seq_len = 24 * 4 * 4
+            self.label_len = 24 * 4
+            self.pred_len = 24 * 4
         else:
             self.seq_len = size[0]
             self.label_len = size[1]
             self.pred_len = size[2]
         # init
-        assert flag in ['train', 'test', 'val']
-        type_map = {'train':0, 'val':1, 'test':2}
+        assert flag in ["train", "test", "val"]
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
-        
+
         self.features = features
         self.target = target
         self.scale = scale
         self.inverse = inverse
         self.timeenc = timeenc
         self.freq = freq
-        
+
         self.root_path = root_path
         self.data_path = data_path
         self.__read_data__()
 
     def __read_data__(self):
         self.scaler = StandardScaler()
-        df_raw = pd.read_csv(os.path.join(self.root_path,
-                                          self.data_path))
+        df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
 
-        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
-        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
+        border1s = [
+            0,
+            18 * 30 * 24 - self.seq_len,
+            18 * 30 * 24 + 3 * 30 * 24 - self.seq_len,
+        ]
+        border2s = [
+            18 * 30 * 24,
+            18 * 30 * 24 + 3 * 30 * 24,
+            18 * 30 * 24 + 6 * 30 * 24,
+        ]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
-        
-        if self.features == 'M' or self.features == 'MS':
+
+        if self.features == "M" or self.features == "MS":
             #### Added error raise as dataset univariate
-            raise ValueError("M and MS invalid settings. Use univariate setting 'S' for the given dataset.")
-            #cols_data = df_raw.columns[1:]
-            #df_data = df_raw[cols_data]
-        elif self.features == 'S':
+            raise ValueError(
+                "M and MS invalid settings. Use univariate setting 'S' for the given dataset."
+            )
+            # cols_data = df_raw.columns[1:]
+            # df_data = df_raw[cols_data]
+        elif self.features == "S":
             df_data = df_raw[[self.target]]
 
         if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
+            train_data = df_data[border1s[0] : border2s[0]]
             self.scaler.fit(train_data.values)
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
 
-        df_stamp = df_raw[['date']][border1:border2]
-        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        df_stamp = df_raw[["date"]][border1:border2]
+        df_stamp["date"] = pd.to_datetime(df_stamp.date)
         if self.timeenc == 0:
-            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
-            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
-            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
-            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
-            data_stamp = df_stamp.drop(['date'], 1).values
+            df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp["weekday"] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp["hour"] = df_stamp.date.apply(lambda row: row.hour, 1)
+            data_stamp = df_stamp.drop(["date"], 1).values
         elif self.timeenc == 1:
-            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = time_features(
+                pd.to_datetime(df_stamp["date"].values), freq=self.freq
+            )
             data_stamp = data_stamp.transpose(1, 0)
 
         self.data_x = data[border1:border2]
@@ -476,70 +547,91 @@ class Dataset_WIND_hour(Dataset):
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
+
 
 class Dataset_SYNTH_hour(Dataset):
-    def __init__(self, root_path, flag='train', size=None, 
-                 features='S', data_path='SYNTHh1.csv', 
-                 target='TARGET', scale=True, inverse=False, timeenc=0, freq='h', cols=None):
+    def __init__(
+        self,
+        root_path,
+        flag="train",
+        size=None,
+        features="S",
+        data_path="SYNTHh1.csv",
+        target="TARGET",
+        scale=True,
+        inverse=False,
+        timeenc=0,
+        freq="h",
+        cols=None,
+    ):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
-            self.seq_len = 24*4*4
-            self.label_len = 24*4
-            self.pred_len = 24*4
+            self.seq_len = 24 * 4 * 4
+            self.label_len = 24 * 4
+            self.pred_len = 24 * 4
         else:
             self.seq_len = size[0]
             self.label_len = size[1]
             self.pred_len = size[2]
         # init
-        assert flag in ['train', 'test', 'val']
-        type_map = {'train':0, 'val':1, 'test':2}
+        assert flag in ["train", "test", "val"]
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
-        
+
         self.features = features
         self.target = target
         self.scale = scale
         self.inverse = inverse
         self.timeenc = timeenc
         self.freq = freq
-        
+
         self.root_path = root_path
         self.data_path = data_path
         self.__read_data__()
 
     def __read_data__(self):
         self.scaler = StandardScaler()
-        df_raw = pd.read_csv(os.path.join(self.root_path,
-                                          self.data_path))
+        df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
 
-        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
-        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
+        border1s = [
+            0,
+            18 * 30 * 24 - self.seq_len,
+            18 * 30 * 24 + 3 * 30 * 24 - self.seq_len,
+        ]
+        border2s = [
+            18 * 30 * 24,
+            18 * 30 * 24 + 3 * 30 * 24,
+            18 * 30 * 24 + 6 * 30 * 24,
+        ]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
-        
-        if self.features == 'M' or self.features == 'MS':
+
+        if self.features == "M" or self.features == "MS":
             cols_data = df_raw.columns[1:]
             df_data = df_raw[cols_data]
-        elif self.features == 'S':
+        elif self.features == "S":
             df_data = df_raw[[self.target]]
 
         if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
+            train_data = df_data[border1s[0] : border2s[0]]
             self.scaler.fit(train_data.values)
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
 
-        df_stamp = df_raw[['date']][border1:border2]
-        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        df_stamp = df_raw[["date"]][border1:border2]
+        df_stamp["date"] = pd.to_datetime(df_stamp.date)
         if self.timeenc == 0:
-            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
-            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
-            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
-            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
-            data_stamp = df_stamp.drop(['date'], 1).values
+            df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp["weekday"] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp["hour"] = df_stamp.date.apply(lambda row: row.hour, 1)
+            data_stamp = df_stamp.drop(["date"], 1).values
         elif self.timeenc == 1:
-            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = time_features(
+                pd.to_datetime(df_stamp["date"].values), freq=self.freq
+            )
             data_stamp = data_stamp.transpose(1, 0)
 
         self.data_x = data[border1:border2]
@@ -564,70 +656,91 @@ class Dataset_SYNTH_hour(Dataset):
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
-    
+
+
 class Dataset_SYNTH_additive(Dataset):
-    def __init__(self, root_path, flag='train', size=None, 
-                 features='S', data_path='SYNTH_additive.csv', 
-                 target='TARGET', scale=True, inverse=False, timeenc=0, freq='h', cols=None):
+    def __init__(
+        self,
+        root_path,
+        flag="train",
+        size=None,
+        features="S",
+        data_path="SYNTH_additive.csv",
+        target="TARGET",
+        scale=True,
+        inverse=False,
+        timeenc=0,
+        freq="h",
+        cols=None,
+    ):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
-            self.seq_len = 24*4*4
-            self.label_len = 24*4
-            self.pred_len = 24*4
+            self.seq_len = 24 * 4 * 4
+            self.label_len = 24 * 4
+            self.pred_len = 24 * 4
         else:
             self.seq_len = size[0]
             self.label_len = size[1]
             self.pred_len = size[2]
         # init
-        assert flag in ['train', 'test', 'val']
-        type_map = {'train':0, 'val':1, 'test':2}
+        assert flag in ["train", "test", "val"]
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
-        
+
         self.features = features
         self.target = target
         self.scale = scale
         self.inverse = inverse
         self.timeenc = timeenc
         self.freq = freq
-        
+
         self.root_path = root_path
         self.data_path = data_path
         self.__read_data__()
 
     def __read_data__(self):
         self.scaler = StandardScaler()
-        df_raw = pd.read_csv(os.path.join(self.root_path,
-                                          self.data_path))
+        df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
 
-        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
-        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
+        border1s = [
+            0,
+            18 * 30 * 24 - self.seq_len,
+            18 * 30 * 24 + 3 * 30 * 24 - self.seq_len,
+        ]
+        border2s = [
+            18 * 30 * 24,
+            18 * 30 * 24 + 3 * 30 * 24,
+            18 * 30 * 24 + 6 * 30 * 24,
+        ]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
-        
-        if self.features == 'M' or self.features == 'MS':
+
+        if self.features == "M" or self.features == "MS":
             cols_data = df_raw.columns[1:]
             df_data = df_raw[cols_data]
-        elif self.features == 'S':
+        elif self.features == "S":
             df_data = df_raw[[self.target]]
 
         if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
+            train_data = df_data[border1s[0] : border2s[0]]
             self.scaler.fit(train_data.values)
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
 
-        df_stamp = df_raw[['date']][border1:border2]
-        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        df_stamp = df_raw[["date"]][border1:border2]
+        df_stamp["date"] = pd.to_datetime(df_stamp.date)
         if self.timeenc == 0:
-            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
-            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
-            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
-            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
-            data_stamp = df_stamp.drop(['date'], 1).values
+            df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp["weekday"] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp["hour"] = df_stamp.date.apply(lambda row: row.hour, 1)
+            data_stamp = df_stamp.drop(["date"], 1).values
         elif self.timeenc == 1:
-            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = time_features(
+                pd.to_datetime(df_stamp["date"].values), freq=self.freq
+            )
             data_stamp = data_stamp.transpose(1, 0)
 
         self.data_x = data[border1:border2]
@@ -652,68 +765,90 @@ class Dataset_SYNTH_additive(Dataset):
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
+
+
 class Dataset_SYNTH_additive_reversal(Dataset):
-    def __init__(self, root_path, flag='train', size=None, 
-                 features='S', data_path='SYNTH_additive_reversals.csv', 
-                 target='TARGET', scale=True, inverse=False, timeenc=0, freq='h', cols=None):
+    def __init__(
+        self,
+        root_path,
+        flag="train",
+        size=None,
+        features="S",
+        data_path="SYNTH_additive_reversals.csv",
+        target="TARGET",
+        scale=True,
+        inverse=False,
+        timeenc=0,
+        freq="h",
+        cols=None,
+    ):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
-            self.seq_len = 24*4*4
-            self.label_len = 24*4
-            self.pred_len = 24*4
+            self.seq_len = 24 * 4 * 4
+            self.label_len = 24 * 4
+            self.pred_len = 24 * 4
         else:
             self.seq_len = size[0]
             self.label_len = size[1]
             self.pred_len = size[2]
         # init
-        assert flag in ['train', 'test', 'val']
-        type_map = {'train':0, 'val':1, 'test':2}
+        assert flag in ["train", "test", "val"]
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
-        
+
         self.features = features
         self.target = target
         self.scale = scale
         self.inverse = inverse
         self.timeenc = timeenc
         self.freq = freq
-        
+
         self.root_path = root_path
         self.data_path = data_path
         self.__read_data__()
 
     def __read_data__(self):
         self.scaler = StandardScaler()
-        df_raw = pd.read_csv(os.path.join(self.root_path,
-                                          self.data_path))
-        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
-        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
+        df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
+        border1s = [
+            0,
+            18 * 30 * 24 - self.seq_len,
+            18 * 30 * 24 + 3 * 30 * 24 - self.seq_len,
+        ]
+        border2s = [
+            18 * 30 * 24,
+            18 * 30 * 24 + 3 * 30 * 24,
+            18 * 30 * 24 + 6 * 30 * 24,
+        ]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
-        
-        if self.features == 'M' or self.features == 'MS':
+
+        if self.features == "M" or self.features == "MS":
             cols_data = df_raw.columns[1:]
             df_data = df_raw[cols_data]
-        elif self.features == 'S':
+        elif self.features == "S":
             df_data = df_raw[[self.target]]
 
         if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
+            train_data = df_data[border1s[0] : border2s[0]]
             self.scaler.fit(train_data.values)
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
 
-        df_stamp = df_raw[['date']][border1:border2]
-        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        df_stamp = df_raw[["date"]][border1:border2]
+        df_stamp["date"] = pd.to_datetime(df_stamp.date)
         if self.timeenc == 0:
-            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
-            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
-            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
-            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
-            data_stamp = df_stamp.drop(['date'], 1).values
+            df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp["weekday"] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp["hour"] = df_stamp.date.apply(lambda row: row.hour, 1)
+            data_stamp = df_stamp.drop(["date"], 1).values
         elif self.timeenc == 1:
-            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = time_features(
+                pd.to_datetime(df_stamp["date"].values), freq=self.freq
+            )
             data_stamp = data_stamp.transpose(1, 0)
 
         self.data_x = data[border1:border2]
@@ -738,70 +873,91 @@ class Dataset_SYNTH_additive_reversal(Dataset):
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
+
 
 class Dataset_SYNTH_multiplicative(Dataset):
-    def __init__(self, root_path, flag='train', size=None, 
-                 features='S', data_path='SYNTH_multiplicative.csv', 
-                 target='TARGET', scale=True, inverse=False, timeenc=0, freq='h', cols=None):
+    def __init__(
+        self,
+        root_path,
+        flag="train",
+        size=None,
+        features="S",
+        data_path="SYNTH_multiplicative.csv",
+        target="TARGET",
+        scale=True,
+        inverse=False,
+        timeenc=0,
+        freq="h",
+        cols=None,
+    ):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
-            self.seq_len = 24*4*4
-            self.label_len = 24*4
-            self.pred_len = 24*4
+            self.seq_len = 24 * 4 * 4
+            self.label_len = 24 * 4
+            self.pred_len = 24 * 4
         else:
             self.seq_len = size[0]
             self.label_len = size[1]
             self.pred_len = size[2]
         # init
-        assert flag in ['train', 'test', 'val']
-        type_map = {'train':0, 'val':1, 'test':2}
+        assert flag in ["train", "test", "val"]
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
-        
+
         self.features = features
         self.target = target
         self.scale = scale
         self.inverse = inverse
         self.timeenc = timeenc
         self.freq = freq
-        
+
         self.root_path = root_path
         self.data_path = data_path
         self.__read_data__()
 
     def __read_data__(self):
         self.scaler = StandardScaler()
-        df_raw = pd.read_csv(os.path.join(self.root_path,
-                                          self.data_path))
+        df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
 
-        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
-        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
+        border1s = [
+            0,
+            18 * 30 * 24 - self.seq_len,
+            18 * 30 * 24 + 3 * 30 * 24 - self.seq_len,
+        ]
+        border2s = [
+            18 * 30 * 24,
+            18 * 30 * 24 + 3 * 30 * 24,
+            18 * 30 * 24 + 6 * 30 * 24,
+        ]
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
-        
-        if self.features == 'M' or self.features == 'MS':
+
+        if self.features == "M" or self.features == "MS":
             cols_data = df_raw.columns[1:]
             df_data = df_raw[cols_data]
-        elif self.features == 'S':
+        elif self.features == "S":
             df_data = df_raw[[self.target]]
 
         if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
+            train_data = df_data[border1s[0] : border2s[0]]
             self.scaler.fit(train_data.values)
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
 
-        df_stamp = df_raw[['date']][border1:border2]
-        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        df_stamp = df_raw[["date"]][border1:border2]
+        df_stamp["date"] = pd.to_datetime(df_stamp.date)
         if self.timeenc == 0:
-            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
-            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
-            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
-            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
-            data_stamp = df_stamp.drop(['date'], 1).values
+            df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp["weekday"] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp["hour"] = df_stamp.date.apply(lambda row: row.hour, 1)
+            data_stamp = df_stamp.drop(["date"], 1).values
         elif self.timeenc == 1:
-            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = time_features(
+                pd.to_datetime(df_stamp["date"].values), freq=self.freq
+            )
             data_stamp = data_stamp.transpose(1, 0)
 
         self.data_x = data[border1:border2]
@@ -826,70 +982,91 @@ class Dataset_SYNTH_multiplicative(Dataset):
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
-    
+
+
 class Dataset_SYNTH_multiplicative_reversal(Dataset):
-    def __init__(self, root_path, flag='train', size=None, 
-                 features='S', data_path='SYNTH_multiplicative_reversals.csv', 
-                 target='TARGET', scale=True, inverse=False, timeenc=0, freq='h', cols=None):
+    def __init__(
+        self,
+        root_path,
+        flag="train",
+        size=None,
+        features="S",
+        data_path="SYNTH_multiplicative_reversals.csv",
+        target="TARGET",
+        scale=True,
+        inverse=False,
+        timeenc=0,
+        freq="h",
+        cols=None,
+    ):
         # size [seq_len, label_len, pred_len]
         # info
         if size == None:
-            self.seq_len = 24*4*4
-            self.label_len = 24*4
-            self.pred_len = 24*4
+            self.seq_len = 24 * 4 * 4
+            self.label_len = 24 * 4
+            self.pred_len = 24 * 4
         else:
             self.seq_len = size[0]
             self.label_len = size[1]
             self.pred_len = size[2]
         # init
-        assert flag in ['train', 'test', 'val']
-        type_map = {'train':0, 'val':1, 'test':2}
+        assert flag in ["train", "test", "val"]
+        type_map = {"train": 0, "val": 1, "test": 2}
         self.set_type = type_map[flag]
-        
+
         self.features = features
         self.target = target
         self.scale = scale
         self.inverse = inverse
         self.timeenc = timeenc
         self.freq = freq
-        
+
         self.root_path = root_path
         self.data_path = data_path
         self.__read_data__()
 
     def __read_data__(self):
         self.scaler = StandardScaler()
-        df_raw = pd.read_csv(os.path.join(self.root_path,
-                                          self.data_path))
+        df_raw = pd.read_csv(os.path.join(self.root_path, self.data_path))
 
-        border1s = [0, 18 * 30 * 24 - self.seq_len, 18 * 30 * 24 + 3 * 30 * 24 - self.seq_len]
-        border2s = [18 * 30 * 24, 18 * 30 * 24 + 3 * 30 * 24, 18 * 30 * 24 + 6 * 30 * 24]
-        border1 = border1s[self.set_type]        
+        border1s = [
+            0,
+            18 * 30 * 24 - self.seq_len,
+            18 * 30 * 24 + 3 * 30 * 24 - self.seq_len,
+        ]
+        border2s = [
+            18 * 30 * 24,
+            18 * 30 * 24 + 3 * 30 * 24,
+            18 * 30 * 24 + 6 * 30 * 24,
+        ]
+        border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
-        
-        if self.features == 'M' or self.features == 'MS':
+
+        if self.features == "M" or self.features == "MS":
             cols_data = df_raw.columns[1:]
             df_data = df_raw[cols_data]
-        elif self.features == 'S':
+        elif self.features == "S":
             df_data = df_raw[[self.target]]
 
         if self.scale:
-            train_data = df_data[border1s[0]:border2s[0]]
+            train_data = df_data[border1s[0] : border2s[0]]
             self.scaler.fit(train_data.values)
             data = self.scaler.transform(df_data.values)
         else:
             data = df_data.values
 
-        df_stamp = df_raw[['date']][border1:border2]
-        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+        df_stamp = df_raw[["date"]][border1:border2]
+        df_stamp["date"] = pd.to_datetime(df_stamp.date)
         if self.timeenc == 0:
-            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
-            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
-            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
-            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
-            data_stamp = df_stamp.drop(['date'], 1).values
+            df_stamp["month"] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp["day"] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp["weekday"] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp["hour"] = df_stamp.date.apply(lambda row: row.hour, 1)
+            data_stamp = df_stamp.drop(["date"], 1).values
         elif self.timeenc == 1:
-            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = time_features(
+                pd.to_datetime(df_stamp["date"].values), freq=self.freq
+            )
             data_stamp = data_stamp.transpose(1, 0)
 
         self.data_x = data[border1:border2]
@@ -915,28 +1092,30 @@ class Dataset_SYNTH_multiplicative_reversal(Dataset):
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
 
+
 data_dict = {
-    'SYNTHh1': Dataset_SYNTH_hour,
-    'SYNTHh2': Dataset_SYNTH_hour,
-    'SYNTH_additive': Dataset_SYNTH_additive,
-    'SYNTH_additive_reversal': Dataset_SYNTH_additive_reversal,
-    'SYNTH_multiplicative': Dataset_SYNTH_multiplicative,
-    'SYNTH_multiplicative_reversal' : Dataset_SYNTH_multiplicative_reversal,
-    'DEWINDh_large': Dataset_WIND_hour,
-    'DEWINDh_small': Dataset_WIND_hour,
-    'ETTh1': Dataset_ETT_hour
+    "SYNTHh1": Dataset_SYNTH_hour,
+    "SYNTHh2": Dataset_SYNTH_hour,
+    "SYNTH_additive": Dataset_SYNTH_additive,
+    "SYNTH_additive_reversal": Dataset_SYNTH_additive_reversal,
+    "SYNTH_multiplicative": Dataset_SYNTH_multiplicative,
+    "SYNTH_multiplicative_reversal": Dataset_SYNTH_multiplicative_reversal,
+    "DEWINDh_large": Dataset_WIND_hour,
+    "DEWINDh_small": Dataset_WIND_hour,
+    "ETTh1": Dataset_ETT_hour,
 }
+
 
 def data_provider(args, flag):
     Data = data_dict[args.data]
-    timeenc = 0 if args.embed != 'timeF' else 1
+    timeenc = 0 if args.embed != "timeF" else 1
 
-    if flag == 'test':
+    if flag == "test":
         shuffle_flag = False
         drop_last = True
         batch_size = args.batch_size
         freq = args.freq
-    elif flag == 'pred':
+    elif flag == "pred":
         shuffle_flag = False
         drop_last = True
         batch_size = 1
@@ -956,7 +1135,7 @@ def data_provider(args, flag):
         features=args.features,
         target=args.target,
         timeenc=timeenc,
-        freq=freq
+        freq=freq,
     )
     print(flag, len(data_set))
     data_loader = DataLoader(
@@ -964,14 +1143,17 @@ def data_provider(args, flag):
         batch_size=batch_size,
         shuffle=shuffle_flag,
         num_workers=args.num_workers,
-        drop_last=drop_last)
+        drop_last=drop_last,
+    )
     return data_set, data_loader
 
-###########################################################################################################################
-# Experiment class ########################################################################################################
-    '''
+    ###########################################################################################################################
+    # Experiment class ########################################################################################################
+    """
     Parent class for fitting and testing. The actual model training class will inherit from this class. 
-    '''
+    """
+
+
 class Exp_Basic(object):
     def __init__(self, args):
         self.args = args
@@ -984,13 +1166,14 @@ class Exp_Basic(object):
 
     def _acquire_device(self):
         if self.args.use_gpu:
-            os.environ["CUDA_VISIBLE_DEVICES"] = str(
-                self.args.gpu) if not self.args.use_multi_gpu else self.args.devices
-            device = torch.device('cuda:{}'.format(self.args.gpu))
-            print('Use GPU: cuda:{}'.format(self.args.gpu))
+            os.environ["CUDA_VISIBLE_DEVICES"] = (
+                str(self.args.gpu) if not self.args.use_multi_gpu else self.args.devices
+            )
+            device = torch.device("cuda:{}".format(self.args.gpu))
+            print("Use GPU: cuda:{}".format(self.args.gpu))
         else:
-            device = torch.device('cpu')
-            print('Use CPU')
+            device = torch.device("cpu")
+            print("Use CPU")
         return device
 
     def _get_data(self):
@@ -1005,6 +1188,7 @@ class Exp_Basic(object):
     def test(self):
         pass
 
+
 ###########################################################################################################################
 ### MODEL COMPONENTS ######################################################################################################
 # Data Embedding ##########################################################################################################
@@ -1016,7 +1200,7 @@ def compared_version(ver1, ver2):
     """
     list1 = str(ver1).split(".")
     list2 = str(ver2).split(".")
-    
+
     for i in range(len(list1)) if len(list1) < len(list2) else range(len(list2)):
         if int(list1[i]) == int(list2[i]):
             pass
@@ -1024,14 +1208,15 @@ def compared_version(ver1, ver2):
             return -1
         else:
             return 1
-    
+
     if len(list1) == len(list2):
         return True
     elif len(list1) < len(list2):
         return False
     else:
         return True
-    
+
+
 class PositionalEmbedding(nn.Module):
     def __init__(self, d_model, max_len=5000):
         super(PositionalEmbedding, self).__init__()
@@ -1040,27 +1225,37 @@ class PositionalEmbedding(nn.Module):
         pe.require_grad = False
 
         position = torch.arange(0, max_len).float().unsqueeze(1)
-        div_term = (torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)).exp()
+        div_term = (
+            torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)
+        ).exp()
 
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
 
         pe = pe.unsqueeze(0)
-        self.register_buffer('pe', pe)
+        self.register_buffer("pe", pe)
 
     def forward(self, x):
-        return self.pe[:, :x.size(1)]
+        return self.pe[:, : x.size(1)]
 
 
 class TokenEmbedding(nn.Module):
     def __init__(self, c_in, d_model):
         super(TokenEmbedding, self).__init__()
-        padding = 1 if compared_version(torch.__version__, '1.5.0') else 2
-        self.tokenConv = nn.Conv1d(in_channels=c_in, out_channels=d_model,
-                                   kernel_size=3, padding=padding, padding_mode='circular', bias=False)
+        padding = 1 if compared_version(torch.__version__, "1.5.0") else 2
+        self.tokenConv = nn.Conv1d(
+            in_channels=c_in,
+            out_channels=d_model,
+            kernel_size=3,
+            padding=padding,
+            padding_mode="circular",
+            bias=False,
+        )
         for m in self.modules():
             if isinstance(m, nn.Conv1d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='leaky_relu')
+                nn.init.kaiming_normal_(
+                    m.weight, mode="fan_in", nonlinearity="leaky_relu"
+                )
 
     def forward(self, x):
         x = self.tokenConv(x.permute(0, 2, 1)).transpose(1, 2)
@@ -1075,7 +1270,9 @@ class FixedEmbedding(nn.Module):
         w.require_grad = False
 
         position = torch.arange(0, c_in).float().unsqueeze(1)
-        div_term = (torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)).exp()
+        div_term = (
+            torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)
+        ).exp()
 
         w[:, 0::2] = torch.sin(position * div_term)
         w[:, 1::2] = torch.cos(position * div_term)
@@ -1088,7 +1285,7 @@ class FixedEmbedding(nn.Module):
 
 
 class TemporalEmbedding(nn.Module):
-    def __init__(self, d_model, embed_type='fixed', freq='h'):
+    def __init__(self, d_model, embed_type="fixed", freq="h"):
         super(TemporalEmbedding, self).__init__()
 
         minute_size = 4
@@ -1097,8 +1294,8 @@ class TemporalEmbedding(nn.Module):
         day_size = 32
         month_size = 13
 
-        Embed = FixedEmbedding if embed_type == 'fixed' else nn.Embedding
-        if freq == 't':
+        Embed = FixedEmbedding if embed_type == "fixed" else nn.Embedding
+        if freq == "t":
             self.minute_embed = Embed(minute_size, d_model)
         self.hour_embed = Embed(hour_size, d_model)
         self.weekday_embed = Embed(weekday_size, d_model)
@@ -1108,7 +1305,9 @@ class TemporalEmbedding(nn.Module):
     def forward(self, x):
         x = x.long()
 
-        minute_x = self.minute_embed(x[:, :, 4]) if hasattr(self, 'minute_embed') else 0.
+        minute_x = (
+            self.minute_embed(x[:, :, 4]) if hasattr(self, "minute_embed") else 0.0
+        )
         hour_x = self.hour_embed(x[:, :, 3])
         weekday_x = self.weekday_embed(x[:, :, 2])
         day_x = self.day_embed(x[:, :, 1])
@@ -1118,10 +1317,10 @@ class TemporalEmbedding(nn.Module):
 
 
 class TimeFeatureEmbedding(nn.Module):
-    def __init__(self, d_model, embed_type='timeF', freq='h'):
+    def __init__(self, d_model, embed_type="timeF", freq="h"):
         super(TimeFeatureEmbedding, self).__init__()
 
-        freq_map = {'h': 4, 't': 5, 's': 6, 'm': 1, 'a': 1, 'w': 2, 'd': 3, 'b': 3}
+        freq_map = {"h": 4, "t": 5, "s": 6, "m": 1, "a": 1, "w": 2, "d": 3, "b": 3}
         d_inp = freq_map[freq]
         self.embed = nn.Linear(d_inp, d_model, bias=False)
 
@@ -1130,44 +1329,62 @@ class TimeFeatureEmbedding(nn.Module):
 
 
 class DataEmbedding(nn.Module):
-    def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
+    def __init__(self, c_in, d_model, embed_type="fixed", freq="h", dropout=0.1):
         super(DataEmbedding, self).__init__()
 
         self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
         self.position_embedding = PositionalEmbedding(d_model=d_model)
-        self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=embed_type,
-                                                    freq=freq) if embed_type != 'timeF' else TimeFeatureEmbedding(
-            d_model=d_model, embed_type=embed_type, freq=freq)
+        self.temporal_embedding = (
+            TemporalEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
+            if embed_type != "timeF"
+            else TimeFeatureEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
+        )
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, x_mark):
-        x = self.value_embedding(x) + self.temporal_embedding(x_mark) + self.position_embedding(x)
+        x = (
+            self.value_embedding(x)
+            + self.temporal_embedding(x_mark)
+            + self.position_embedding(x)
+        )
         return self.dropout(x)
 
 
 class DataEmbedding_wo_pos(nn.Module):
-    def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1):
+    def __init__(self, c_in, d_model, embed_type="fixed", freq="h", dropout=0.1):
         super(DataEmbedding_wo_pos, self).__init__()
 
         self.value_embedding = TokenEmbedding(c_in=c_in, d_model=d_model)
         self.position_embedding = PositionalEmbedding(d_model=d_model)
-        self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=embed_type,
-                                                    freq=freq) if embed_type != 'timeF' else TimeFeatureEmbedding(
-            d_model=d_model, embed_type=embed_type, freq=freq)
+        self.temporal_embedding = (
+            TemporalEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
+            if embed_type != "timeF"
+            else TimeFeatureEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
+        )
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x, x_mark):
         x = self.value_embedding(x) + self.temporal_embedding(x_mark)
         return self.dropout(x)
 
+
 ###########################################################################################################################
 # Attention Mechanisms ####################################################################################################
 
+
 class ProbAttention(nn.Module):
-    '''
-    ProbSparse attention mechanism introduced in Informer. 
-    '''
-    def __init__(self, mask_flag=True, factor=5, scale=None, attention_dropout=0.1, output_attention=False):
+    """
+    ProbSparse attention mechanism introduced in Informer.
+    """
+
+    def __init__(
+        self,
+        mask_flag=True,
+        factor=5,
+        scale=None,
+        attention_dropout=0.1,
+        output_attention=False,
+    ):
         super(ProbAttention, self).__init__()
         self.factor = factor
         self.scale = scale
@@ -1182,7 +1399,9 @@ class ProbAttention(nn.Module):
 
         # calculate the sampled Q_K
         K_expand = K.unsqueeze(-3).expand(B, H, L_Q, L_K, E)
-        index_sample = torch.randint(L_K, (L_Q, sample_k))  # real U = U_part(factor*ln(L_k))*L_q
+        index_sample = torch.randint(
+            L_K, (L_Q, sample_k)
+        )  # real U = U_part(factor*ln(L_k))*L_q
         K_sample = K_expand[:, :, torch.arange(L_Q).unsqueeze(1), index_sample, :]
         Q_K_sample = torch.matmul(Q.unsqueeze(-2), K_sample.transpose(-2, -1)).squeeze()
 
@@ -1191,9 +1410,9 @@ class ProbAttention(nn.Module):
         M_top = M.topk(n_top, sorted=False)[1]
 
         # use the reduced Q to calculate Q_K
-        Q_reduce = Q[torch.arange(B)[:, None, None],
-                   torch.arange(H)[None, :, None],
-                   M_top, :]  # factor*ln(L_q)
+        Q_reduce = Q[
+            torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], M_top, :
+        ]  # factor*ln(L_q)
         Q_K = torch.matmul(Q_reduce, K.transpose(-2, -1))  # factor*ln(L_q)*L_k
 
         return Q_K, M_top
@@ -1205,7 +1424,7 @@ class ProbAttention(nn.Module):
             V_sum = V.mean(dim=-2)
             contex = V_sum.unsqueeze(-2).expand(B, H, L_Q, V_sum.shape[-1]).clone()
         else:  # use mask
-            assert (L_Q == L_V)  # requires that L_Q == L_V, i.e. for self-attention only
+            assert L_Q == L_V  # requires that L_Q == L_V, i.e. for self-attention only
             contex = V.cumsum(dim=-2)
         return contex
 
@@ -1218,12 +1437,14 @@ class ProbAttention(nn.Module):
 
         attn = torch.softmax(scores, dim=-1)  # nn.Softmax(dim=-1)(scores)
 
-        context_in[torch.arange(B)[:, None, None],
-        torch.arange(H)[None, :, None],
-        index, :] = torch.matmul(attn, V).type_as(context_in)
+        context_in[
+            torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], index, :
+        ] = torch.matmul(attn, V).type_as(context_in)
         if self.output_attention:
             attns = (torch.ones([B, H, L_V, L_V]) / L_V).type_as(attn).to(attn.device)
-            attns[torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], index, :] = attn
+            attns[
+                torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], index, :
+            ] = attn
             return (context_in, attns)
         else:
             return (context_in, None)
@@ -1236,8 +1457,8 @@ class ProbAttention(nn.Module):
         keys = keys.transpose(2, 1)
         values = values.transpose(2, 1)
 
-        U_part = self.factor * np.ceil(np.log(L_K)).astype('int').item()  # c*ln(L_k)
-        u = self.factor * np.ceil(np.log(L_Q)).astype('int').item()  # c*ln(L_q)
+        U_part = self.factor * np.ceil(np.log(L_K)).astype("int").item()  # c*ln(L_k)
+        u = self.factor * np.ceil(np.log(L_Q)).astype("int").item()  # c*ln(L_q)
 
         U_part = U_part if U_part < L_K else L_K
         u = u if u < L_Q else L_Q
@@ -1245,24 +1466,27 @@ class ProbAttention(nn.Module):
         scores_top, index = self._prob_QK(queries, keys, sample_k=U_part, n_top=u)
 
         # add scale factor
-        scale = self.scale or 1. / sqrt(D)
+        scale = self.scale or 1.0 / sqrt(D)
         if scale is not None:
             scores_top = scores_top * scale
         # get the context
         context = self._get_initial_context(values, L_Q)
         # update the context with selected top_k queries
-        context, attn = self._update_context(context, values, scores_top, index, L_Q, attn_mask)
+        context, attn = self._update_context(
+            context, values, scores_top, index, L_Q, attn_mask
+        )
 
         return context.contiguous(), attn
-    
-# Alternative: vanilla attention mechanism    
+
+
+# Alternative: vanilla attention mechanism
 class AttentionLayer(nn.Module):
-    '''
+    """
     Vanilla attention mechanism as implemented by Vaswani et al. (2017).
     Can be used in the attention layer of Autoformer instead of the ProbSparse mechanism.
-    '''
-    def __init__(self, attention, d_model, n_heads, d_keys=None,
-                 d_values=None):
+    """
+
+    def __init__(self, attention, d_model, n_heads, d_keys=None, d_values=None):
         super(AttentionLayer, self).__init__()
 
         d_keys = d_keys or (d_model // n_heads)
@@ -1284,21 +1508,26 @@ class AttentionLayer(nn.Module):
         keys = self.key_projection(keys).view(B, S, H, -1)
         values = self.value_projection(values).view(B, S, H, -1)
 
-        out, attn = self.inner_attention(
-            queries,
-            keys,
-            values,
-            attn_mask
-        )
+        out, attn = self.inner_attention(queries, keys, values, attn_mask)
         out = out.view(B, L, -1)
 
         return self.out_projection(out), attn
 
-# Alternative: The Reformer attention mechanism    
+
+# Alternative: The Reformer attention mechanism
 ## Only used in Reformer
 class ReformerLayer(nn.Module):
-    def __init__(self, attention, d_model, n_heads, d_keys=None,
-                 d_values=None, causal=False, bucket_size=4, n_hashes=4):
+    def __init__(
+        self,
+        attention,
+        d_model,
+        n_heads,
+        d_keys=None,
+        d_values=None,
+        causal=False,
+        bucket_size=4,
+        n_hashes=4,
+    ):
         super().__init__()
         self.bucket_size = bucket_size
         self.attn = LSHSelfAttention(
@@ -1306,7 +1535,7 @@ class ReformerLayer(nn.Module):
             heads=n_heads,
             bucket_size=bucket_size,
             n_hashes=n_hashes,
-            causal=causal
+            causal=causal,
         )
 
     def fit_length(self, queries):
@@ -1317,15 +1546,19 @@ class ReformerLayer(nn.Module):
         else:
             # fill the time series
             fill_len = (self.bucket_size * 2) - (N % (self.bucket_size * 2))
-            return torch.cat([queries, torch.zeros([B, fill_len, C]).to(queries.device)], dim=1)
+            return torch.cat(
+                [queries, torch.zeros([B, fill_len, C]).to(queries.device)], dim=1
+            )
 
     def forward(self, queries, keys, values, attn_mask):
         # in Reformer: defalut queries=keys
         B, N, C = queries.shape
         queries = self.attn(self.fit_length(queries))[:, :N, :]
         return queries, None
-    
+
+
 # Auto Correlation#########################################################################################################
+
 
 class AutoCorrelation(nn.Module):
     """
@@ -1334,7 +1567,15 @@ class AutoCorrelation(nn.Module):
     (2) time delay aggregation
     This block can replace the self-attention family mechanism seamlessly.
     """
-    def __init__(self, mask_flag=True, factor=1, scale=None, attention_dropout=0.1, output_attention=False):
+
+    def __init__(
+        self,
+        mask_flag=True,
+        factor=1,
+        scale=None,
+        attention_dropout=0.1,
+        output_attention=False,
+    ):
         super(AutoCorrelation, self).__init__()
         self.factor = factor
         self.scale = scale
@@ -1362,8 +1603,13 @@ class AutoCorrelation(nn.Module):
         delays_agg = torch.zeros_like(values).float()
         for i in range(top_k):
             pattern = torch.roll(tmp_values, -int(index[i]), -1)
-            delays_agg = delays_agg + pattern * \
-                         (tmp_corr[:, i].unsqueeze(1).unsqueeze(1).unsqueeze(1).repeat(1, head, channel, length))
+            delays_agg = delays_agg + pattern * (
+                tmp_corr[:, i]
+                .unsqueeze(1)
+                .unsqueeze(1)
+                .unsqueeze(1)
+                .repeat(1, head, channel, length)
+            )
         return delays_agg
 
     def time_delay_agg_inference(self, values, corr):
@@ -1376,8 +1622,14 @@ class AutoCorrelation(nn.Module):
         channel = values.shape[2]
         length = values.shape[3]
         # index init
-        init_index = torch.arange(length).unsqueeze(0).unsqueeze(0).unsqueeze(0)\
-            .repeat(batch, head, channel, 1).to(values.device)
+        init_index = (
+            torch.arange(length)
+            .unsqueeze(0)
+            .unsqueeze(0)
+            .unsqueeze(0)
+            .repeat(batch, head, channel, 1)
+            .to(values.device)
+        )
         # find top k
         top_k = int(self.factor * math.log(length))
         mean_value = torch.mean(torch.mean(corr, dim=1), dim=1)
@@ -1388,10 +1640,17 @@ class AutoCorrelation(nn.Module):
         tmp_values = values.repeat(1, 1, 1, 2)
         delays_agg = torch.zeros_like(values).float()
         for i in range(top_k):
-            tmp_delay = init_index + delay[:, i].unsqueeze(1).unsqueeze(1).unsqueeze(1).repeat(1, head, channel, length)
+            tmp_delay = init_index + delay[:, i].unsqueeze(1).unsqueeze(1).unsqueeze(
+                1
+            ).repeat(1, head, channel, length)
             pattern = torch.gather(tmp_values, dim=-1, index=tmp_delay)
-            delays_agg = delays_agg + pattern * \
-                         (tmp_corr[:, i].unsqueeze(1).unsqueeze(1).unsqueeze(1).repeat(1, head, channel, length))
+            delays_agg = delays_agg + pattern * (
+                tmp_corr[:, i]
+                .unsqueeze(1)
+                .unsqueeze(1)
+                .unsqueeze(1)
+                .repeat(1, head, channel, length)
+            )
         return delays_agg
 
     def time_delay_agg_full(self, values, corr):
@@ -1403,8 +1662,14 @@ class AutoCorrelation(nn.Module):
         channel = values.shape[2]
         length = values.shape[3]
         # index init
-        init_index = torch.arange(length).unsqueeze(0).unsqueeze(0).unsqueeze(0)\
-            .repeat(batch, head, channel, 1).to(values.device)
+        init_index = (
+            torch.arange(length)
+            .unsqueeze(0)
+            .unsqueeze(0)
+            .unsqueeze(0)
+            .repeat(batch, head, channel, 1)
+            .to(values.device)
+        )
         # find top k
         top_k = int(self.factor * math.log(length))
         weights, delay = torch.topk(corr, top_k, dim=-1)
@@ -1423,7 +1688,7 @@ class AutoCorrelation(nn.Module):
         B, L, H, E = queries.shape
         _, S, _, D = values.shape
         if L > S:
-            zeros = torch.zeros_like(queries[:, :(L - S), :]).float()
+            zeros = torch.zeros_like(queries[:, : (L - S), :]).float()
             values = torch.cat([values, zeros], dim=1)
             keys = torch.cat([keys, zeros], dim=1)
         else:
@@ -1438,9 +1703,13 @@ class AutoCorrelation(nn.Module):
 
         # time delay agg
         if self.training:
-            V = self.time_delay_agg_training(values.permute(0, 2, 3, 1).contiguous(), corr).permute(0, 3, 1, 2)
+            V = self.time_delay_agg_training(
+                values.permute(0, 2, 3, 1).contiguous(), corr
+            ).permute(0, 3, 1, 2)
         else:
-            V = self.time_delay_agg_inference(values.permute(0, 2, 3, 1).contiguous(), corr).permute(0, 3, 1, 2)
+            V = self.time_delay_agg_inference(
+                values.permute(0, 2, 3, 1).contiguous(), corr
+            ).permute(0, 3, 1, 2)
 
         if self.output_attention:
             return (V.contiguous(), corr.permute(0, 3, 1, 2))
@@ -1449,8 +1718,7 @@ class AutoCorrelation(nn.Module):
 
 
 class AutoCorrelationLayer(nn.Module):
-    def __init__(self, correlation, d_model, n_heads, d_keys=None,
-                 d_values=None):
+    def __init__(self, correlation, d_model, n_heads, d_keys=None, d_values=None):
         super(AutoCorrelationLayer, self).__init__()
 
         d_keys = d_keys or (d_model // n_heads)
@@ -1472,23 +1740,21 @@ class AutoCorrelationLayer(nn.Module):
         keys = self.key_projection(keys).view(B, S, H, -1)
         values = self.value_projection(values).view(B, S, H, -1)
 
-        out, attn = self.inner_correlation(
-            queries,
-            keys,
-            values,
-            attn_mask
-        )
+        out, attn = self.inner_correlation(queries, keys, values, attn_mask)
         out = out.view(B, L, -1)
 
         return self.out_projection(out), attn
 
+
 ###########################################################################################################################
 # Encoder-Decoder #########################################################################################################
+
 
 class my_Layernorm(nn.Module):
     """
     Special designed layernorm for the seasonal part
     """
+
     def __init__(self, channels):
         super(my_Layernorm, self).__init__()
         self.layernorm = nn.LayerNorm(channels)
@@ -1503,6 +1769,7 @@ class moving_avg(nn.Module):
     """
     Moving average block to highlight the trend of time series
     """
+
     def __init__(self, kernel_size, stride):
         super(moving_avg, self).__init__()
         self.kernel_size = kernel_size
@@ -1522,6 +1789,7 @@ class series_decomp(nn.Module):
     """
     Series decomposition block
     """
+
     def __init__(self, kernel_size):
         super(series_decomp, self).__init__()
         self.moving_avg = moving_avg(kernel_size, stride=1)
@@ -1531,29 +1799,41 @@ class series_decomp(nn.Module):
         res = x - moving_mean
         return res, moving_mean
 
+
 ###########################################################################################################################
 # Encoder#########################################################################################################
+
 
 class EncoderLayer(nn.Module):
     """
     Autoformer encoder layer with the progressive decomposition architecture
     """
-    def __init__(self, attention, d_model, d_ff=None, moving_avg=25, dropout=0.1, activation="relu"):
+
+    def __init__(
+        self,
+        attention,
+        d_model,
+        d_ff=None,
+        moving_avg=25,
+        dropout=0.1,
+        activation="relu",
+    ):
         super(EncoderLayer, self).__init__()
         d_ff = d_ff or 4 * d_model
         self.attention = attention
-        self.conv1 = nn.Conv1d(in_channels=d_model, out_channels=d_ff, kernel_size=1, bias=False)
-        self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1, bias=False)
+        self.conv1 = nn.Conv1d(
+            in_channels=d_model, out_channels=d_ff, kernel_size=1, bias=False
+        )
+        self.conv2 = nn.Conv1d(
+            in_channels=d_ff, out_channels=d_model, kernel_size=1, bias=False
+        )
         self.decomp1 = series_decomp(moving_avg)
         self.decomp2 = series_decomp(moving_avg)
         self.dropout = nn.Dropout(dropout)
         self.activation = F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, attn_mask=None):
-        new_x, attn = self.attention(
-            x, x, x,
-            attn_mask=attn_mask
-        )
+        new_x, attn = self.attention(x, x, x, attn_mask=attn_mask)
         x = x + self.dropout(new_x)
         x, _ = self.decomp1(x)
         y = x
@@ -1567,10 +1847,13 @@ class Encoder(nn.Module):
     """
     Autoformer encoder
     """
+
     def __init__(self, attn_layers, conv_layers=None, norm_layer=None):
         super(Encoder, self).__init__()
         self.attn_layers = nn.ModuleList(attn_layers)
-        self.conv_layers = nn.ModuleList(conv_layers) if conv_layers is not None else None
+        self.conv_layers = (
+            nn.ModuleList(conv_layers) if conv_layers is not None else None
+        )
         self.norm = norm_layer
 
     def forward(self, x, attn_mask=None):
@@ -1592,39 +1875,58 @@ class Encoder(nn.Module):
 
         return x, attns
 
+
 ###########################################################################################################################
-#Decoder #########################################################################################################
+# Decoder #########################################################################################################
+
 
 class DecoderLayer(nn.Module):
     """
     Autoformer decoder layer with the progressive decomposition architecture
     """
-    def __init__(self, self_attention, cross_attention, d_model, c_out, d_ff=None,
-                 moving_avg=25, dropout=0.1, activation="relu"):
+
+    def __init__(
+        self,
+        self_attention,
+        cross_attention,
+        d_model,
+        c_out,
+        d_ff=None,
+        moving_avg=25,
+        dropout=0.1,
+        activation="relu",
+    ):
         super(DecoderLayer, self).__init__()
         d_ff = d_ff or 4 * d_model
         self.self_attention = self_attention
         self.cross_attention = cross_attention
-        self.conv1 = nn.Conv1d(in_channels=d_model, out_channels=d_ff, kernel_size=1, bias=False)
-        self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1, bias=False)
+        self.conv1 = nn.Conv1d(
+            in_channels=d_model, out_channels=d_ff, kernel_size=1, bias=False
+        )
+        self.conv2 = nn.Conv1d(
+            in_channels=d_ff, out_channels=d_model, kernel_size=1, bias=False
+        )
         self.decomp1 = series_decomp(moving_avg)
         self.decomp2 = series_decomp(moving_avg)
         self.decomp3 = series_decomp(moving_avg)
         self.dropout = nn.Dropout(dropout)
-        self.projection = nn.Conv1d(in_channels=d_model, out_channels=c_out, kernel_size=3, stride=1, padding=1,
-                                    padding_mode='circular', bias=False)
+        self.projection = nn.Conv1d(
+            in_channels=d_model,
+            out_channels=c_out,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            padding_mode="circular",
+            bias=False,
+        )
         self.activation = F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, cross, x_mask=None, cross_mask=None):
-        x = x + self.dropout(self.self_attention(
-            x, x, x,
-            attn_mask=x_mask
-        )[0])
+        x = x + self.dropout(self.self_attention(x, x, x, attn_mask=x_mask)[0])
         x, trend1 = self.decomp1(x)
-        x = x + self.dropout(self.cross_attention(
-            x, cross, cross,
-            attn_mask=cross_mask
-        )[0])
+        x = x + self.dropout(
+            self.cross_attention(x, cross, cross, attn_mask=cross_mask)[0]
+        )
         x, trend2 = self.decomp2(x)
         y = x
         y = self.dropout(self.activation(self.conv1(y.transpose(-1, 1))))
@@ -1632,7 +1934,9 @@ class DecoderLayer(nn.Module):
         x, trend3 = self.decomp3(x + y)
 
         residual_trend = trend1 + trend2 + trend3
-        residual_trend = self.projection(residual_trend.permute(0, 2, 1)).transpose(1, 2)
+        residual_trend = self.projection(residual_trend.permute(0, 2, 1)).transpose(
+            1, 2
+        )
         return x, residual_trend
 
 
@@ -1640,6 +1944,7 @@ class Decoder(nn.Module):
     """
     Autoformer encoder
     """
+
     def __init__(self, layers, norm_layer=None, projection=None):
         super(Decoder, self).__init__()
         self.layers = nn.ModuleList(layers)
@@ -1658,15 +1963,18 @@ class Decoder(nn.Module):
             x = self.projection(x)
         return x, trend
 
+
 ###########################################################################################################################
 ### ENTIRE MODEL FRAMEWORKS ###############################################################################################
-# Autoformer  #######################################################################################################    
+# Autoformer  #######################################################################################################
+
 
 class Autoformer(nn.Module):
     """
     Autoformer is the first method to achieve the series-wise connection,
     with inherent O(LlogL) complexity
     """
+
     def __init__(self, configs):
         super(Autoformer, self).__init__()
         self.seq_len = configs.seq_len
@@ -1681,40 +1989,69 @@ class Autoformer(nn.Module):
         # Embedding
         # The series-wise connection inherently contains the sequential information.
         # Thus, we can discard the position embedding of transformers.
-        self.enc_embedding = DataEmbedding_wo_pos(configs.enc_in, configs.d_model, configs.embed, configs.freq,
-                                                  configs.dropout)
-        self.dec_embedding = DataEmbedding_wo_pos(configs.dec_in, configs.d_model, configs.embed, configs.freq,
-                                                  configs.dropout)
+        self.enc_embedding = DataEmbedding_wo_pos(
+            configs.enc_in,
+            configs.d_model,
+            configs.embed,
+            configs.freq,
+            configs.dropout,
+        )
+        self.dec_embedding = DataEmbedding_wo_pos(
+            configs.dec_in,
+            configs.d_model,
+            configs.embed,
+            configs.freq,
+            configs.dropout,
+        )
 
         # Encoder
         self.encoder = Encoder(
             [
                 EncoderLayer(
                     AutoCorrelationLayer(
-                        AutoCorrelation(False, configs.factor, attention_dropout=configs.dropout,
-                                        output_attention=configs.output_attention),
-                        configs.d_model, configs.n_heads),
+                        AutoCorrelation(
+                            False,
+                            configs.factor,
+                            attention_dropout=configs.dropout,
+                            output_attention=configs.output_attention,
+                        ),
+                        configs.d_model,
+                        configs.n_heads,
+                    ),
                     configs.d_model,
                     configs.d_ff,
                     moving_avg=configs.moving_avg,
                     dropout=configs.dropout,
-                    activation=configs.activation
-                ) for l in range(configs.e_layers)
+                    activation=configs.activation,
+                )
+                for l in range(configs.e_layers)
             ],
-            norm_layer=my_Layernorm(configs.d_model)
+            norm_layer=my_Layernorm(configs.d_model),
         )
         # Decoder
         self.decoder = Decoder(
             [
                 DecoderLayer(
                     AutoCorrelationLayer(
-                        AutoCorrelation(True, configs.factor, attention_dropout=configs.dropout,
-                                        output_attention=False),
-                        configs.d_model, configs.n_heads),
+                        AutoCorrelation(
+                            True,
+                            configs.factor,
+                            attention_dropout=configs.dropout,
+                            output_attention=False,
+                        ),
+                        configs.d_model,
+                        configs.n_heads,
+                    ),
                     AutoCorrelationLayer(
-                        AutoCorrelation(False, configs.factor, attention_dropout=configs.dropout,
-                                        output_attention=False),
-                        configs.d_model, configs.n_heads),
+                        AutoCorrelation(
+                            False,
+                            configs.factor,
+                            attention_dropout=configs.dropout,
+                            output_attention=False,
+                        ),
+                        configs.d_model,
+                        configs.n_heads,
+                    ),
                     configs.d_model,
                     configs.c_out,
                     configs.d_ff,
@@ -1725,54 +2062,72 @@ class Autoformer(nn.Module):
                 for l in range(configs.d_layers)
             ],
             norm_layer=my_Layernorm(configs.d_model),
-            projection=nn.Linear(configs.d_model, configs.c_out, bias=True)
+            projection=nn.Linear(configs.d_model, configs.c_out, bias=True),
         )
 
-    def forward(self, x_enc, x_mark_enc, x_dec, x_mark_dec,
-                enc_self_mask=None, dec_self_mask=None, dec_enc_mask=None):
+    def forward(
+        self,
+        x_enc,
+        x_mark_enc,
+        x_dec,
+        x_mark_dec,
+        enc_self_mask=None,
+        dec_self_mask=None,
+        dec_enc_mask=None,
+    ):
         # decomp init
         mean = torch.mean(x_enc, dim=1).unsqueeze(1).repeat(1, self.pred_len, 1)
-        zeros = torch.zeros([x_dec.shape[0], self.pred_len, x_dec.shape[2]], device=x_enc.device)
+        zeros = torch.zeros(
+            [x_dec.shape[0], self.pred_len, x_dec.shape[2]], device=x_enc.device
+        )
         seasonal_init, trend_init = self.decomp(x_enc)
         # decoder input
-        trend_init = torch.cat([trend_init[:, -self.label_len:, :], mean], dim=1)
-        seasonal_init = torch.cat([seasonal_init[:, -self.label_len:, :], zeros], dim=1)
+        trend_init = torch.cat([trend_init[:, -self.label_len :, :], mean], dim=1)
+        seasonal_init = torch.cat(
+            [seasonal_init[:, -self.label_len :, :], zeros], dim=1
+        )
         # enc
         enc_out = self.enc_embedding(x_enc, x_mark_enc)
         enc_out, attns = self.encoder(enc_out, attn_mask=enc_self_mask)
         # dec
         dec_out = self.dec_embedding(seasonal_init, x_mark_dec)
-        seasonal_part, trend_part = self.decoder(dec_out, enc_out, x_mask=dec_self_mask, cross_mask=dec_enc_mask,
-                                                 trend=trend_init)
+        seasonal_part, trend_part = self.decoder(
+            dec_out,
+            enc_out,
+            x_mask=dec_self_mask,
+            cross_mask=dec_enc_mask,
+            trend=trend_init,
+        )
         # final
         dec_out = trend_part + seasonal_part
 
         if self.output_attention:
-            return dec_out[:, -self.pred_len:, :], attns
+            return dec_out[:, -self.pred_len :, :], attns
         else:
-            return dec_out[:, -self.pred_len:, :]  # [B, L, D]
+            return dec_out[:, -self.pred_len :, :]  # [B, L, D]
+
 
 ###########################################################################################################################
 ### Training Helpers ######################################################################################################
 # Learning Rate Decay  ####################################################################################################
 
+
 def adjust_learning_rate(optimizer, epoch, args):
     # lr = args.learning_rate * (0.2 ** (epoch // 2))
-    if args.lradj == 'type1':
+    if args.lradj == "type1":
         lr_adjust = {epoch: args.learning_rate * (0.5 ** ((epoch - 1) // 1))}
-    elif args.lradj == 'type2':
-        lr_adjust = {
-            2: 5e-5, 4: 1e-5, 6: 5e-6, 8: 1e-6,
-            10: 5e-7, 15: 1e-7, 20: 5e-8
-        }
+    elif args.lradj == "type2":
+        lr_adjust = {2: 5e-5, 4: 1e-5, 6: 5e-6, 8: 1e-6, 10: 5e-7, 15: 1e-7, 20: 5e-8}
     if epoch in lr_adjust.keys():
         lr = lr_adjust[epoch]
         for param_group in optimizer.param_groups:
-            param_group['lr'] = lr
-        print('Updating learning rate to {}'.format(lr))
+            param_group["lr"] = lr
+        print("Updating learning rate to {}".format(lr))
+
 
 ###########################################################################################################################
 # Early Stopping ##########################################################################################################
+
 
 class EarlyStopping:
     def __init__(self, patience=7, verbose=False, delta=0):
@@ -1791,7 +2146,7 @@ class EarlyStopping:
             self.save_checkpoint(val_loss, model, path)
         elif score < self.best_score + self.delta:
             self.counter += 1
-            print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            print(f"EarlyStopping counter: {self.counter} out of {self.patience}")
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
@@ -1801,23 +2156,28 @@ class EarlyStopping:
 
     def save_checkpoint(self, val_loss, model, path):
         if self.verbose:
-            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-        torch.save(model.state_dict(), path + '/' + 'checkpoint.pth')
+            print(
+                f"Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ..."
+            )
+        torch.save(model.state_dict(), path + "/" + "checkpoint.pth")
         self.val_loss_min = val_loss
+
 
 ###########################################################################################################################
 # Running Experiments #####################################################################################################
 
+
 class Exp_Autoformer(Exp_Basic):
-    '''
-    Exp_Autoformer is the main class for the Autoformer architecture, which wraps up every component above. 
-    '''
+    """
+    Exp_Autoformer is the main class for the Autoformer architecture, which wraps up every component above.
+    """
+
     def __init__(self, args):
         super(Exp_Autoformer, self).__init__(args)
 
     def _build_model(self):
         model_dict = {
-            'Autoformer': Autoformer,
+            "Autoformer": Autoformer,
             #'Transformer': Transformer,
             #'Informer': Informer,
             #'Reformer': Reformer,
@@ -1842,8 +2202,12 @@ class Exp_Autoformer(Exp_Basic):
 
     def _predict(self, batch_x, batch_y, batch_x_mark, batch_y_mark):
         # decoder input
-        dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
-        dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+        dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len :, :]).float()
+        dec_inp = (
+            torch.cat([batch_y[:, : self.args.label_len, :], dec_inp], dim=1)
+            .float()
+            .to(self.device)
+        )
         # encoder - decoder
 
         def _run_model():
@@ -1858,9 +2222,9 @@ class Exp_Autoformer(Exp_Basic):
         else:
             outputs = _run_model()
 
-        f_dim = -1 if self.args.features == 'MS' else 0
-        outputs = outputs[:, -self.args.pred_len:, f_dim:]
-        batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+        f_dim = -1 if self.args.features == "MS" else 0
+        outputs = outputs[:, -self.args.pred_len :, f_dim:]
+        batch_y = batch_y[:, -self.args.pred_len :, f_dim:].to(self.device)
 
         return outputs, batch_y
 
@@ -1868,14 +2232,18 @@ class Exp_Autoformer(Exp_Basic):
         total_loss = []
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(
+                vali_loader
+            ):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float()
 
                 batch_x_mark = batch_x_mark.float().to(self.device)
                 batch_y_mark = batch_y_mark.float().to(self.device)
 
-                outputs, batch_y = self._predict(batch_x, batch_y, batch_x_mark, batch_y_mark)
+                outputs, batch_y = self._predict(
+                    batch_x, batch_y, batch_x_mark, batch_y_mark
+                )
 
                 pred = outputs.detach().cpu()
                 true = batch_y.detach().cpu()
@@ -1888,9 +2256,9 @@ class Exp_Autoformer(Exp_Basic):
         return total_loss
 
     def train(self, setting):
-        train_data, train_loader = self._get_data(flag='train')
-        vali_data, vali_loader = self._get_data(flag='val')
-        test_data, test_loader = self._get_data(flag='test')
+        train_data, train_loader = self._get_data(flag="train")
+        vali_data, vali_loader = self._get_data(flag="val")
+        test_data, test_loader = self._get_data(flag="test")
 
         path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(path):
@@ -1913,7 +2281,9 @@ class Exp_Autoformer(Exp_Basic):
 
             self.model.train()
             epoch_time = time.time()
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(
+                train_loader
+            ):
                 iter_count += 1
                 model_optim.zero_grad()
                 batch_x = batch_x.float().to(self.device)
@@ -1922,16 +2292,28 @@ class Exp_Autoformer(Exp_Basic):
                 batch_x_mark = batch_x_mark.float().to(self.device)
                 batch_y_mark = batch_y_mark.float().to(self.device)
 
-                outputs, batch_y = self._predict(batch_x, batch_y, batch_x_mark, batch_y_mark)
+                outputs, batch_y = self._predict(
+                    batch_x, batch_y, batch_x_mark, batch_y_mark
+                )
 
                 loss = criterion(outputs, batch_y)
                 train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
-                    print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
+                    print(
+                        "\titers: {0}, epoch: {1} | loss: {2:.7f}".format(
+                            i + 1, epoch + 1, loss.item()
+                        )
+                    )
                     speed = (time.time() - time_now) / iter_count
-                    left_time = speed * ((self.args.train_epochs - epoch) * train_steps - i)
-                    print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
+                    left_time = speed * (
+                        (self.args.train_epochs - epoch) * train_steps - i
+                    )
+                    print(
+                        "\tspeed: {:.4f}s/iter; left time: {:.4f}s".format(
+                            speed, left_time
+                        )
+                    )
                     iter_count = 0
                     time_now = time.time()
 
@@ -1948,8 +2330,11 @@ class Exp_Autoformer(Exp_Basic):
             vali_loss = self.vali(vali_data, vali_loader, criterion)
             test_loss = self.vali(test_data, test_loader, criterion)
 
-            print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
-                epoch + 1, train_steps, train_loss, vali_loss, test_loss))
+            print(
+                "Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
+                    epoch + 1, train_steps, train_loss, vali_loss, test_loss
+                )
+            )
             early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
@@ -1957,33 +2342,39 @@ class Exp_Autoformer(Exp_Basic):
 
             adjust_learning_rate(model_optim, epoch + 1, self.args)
 
-        best_model_path = path + '/' + 'checkpoint.pth'
+        best_model_path = path + "/" + "checkpoint.pth"
         self.model.load_state_dict(torch.load(best_model_path))
 
         return
 
     def test(self, setting, test=0):
-        test_data, test_loader = self._get_data(flag='test')
+        test_data, test_loader = self._get_data(flag="test")
         if test:
-            print('loading model')
-            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+            print("loading model")
+            self.model.load_state_dict(
+                torch.load(os.path.join("./checkpoints/" + setting, "checkpoint.pth"))
+            )
 
         preds = []
         trues = []
-        folder_path = './test_results/' + setting + '/'
+        folder_path = "./test_results/" + setting + "/"
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(
+                test_loader
+            ):
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
 
                 batch_x_mark = batch_x_mark.float().to(self.device)
                 batch_y_mark = batch_y_mark.float().to(self.device)
 
-                outputs, batch_y = self._predict(batch_x, batch_y, batch_x_mark, batch_y_mark)
+                outputs, batch_y = self._predict(
+                    batch_x, batch_y, batch_x_mark, batch_y_mark
+                )
 
                 outputs = outputs.detach().cpu().numpy()
                 batch_y = batch_y.detach().cpu().numpy()
@@ -1997,113 +2388,114 @@ class Exp_Autoformer(Exp_Basic):
                     input = batch_x.detach().cpu().numpy()
                     gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
                     pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
-                    #visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
+                    # visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
                 # Added line - saves the first batch of the test set.
                 if i == 0:
                     first_batch = {
-                    'batch_x' : batch_x ,
-                    'batch_y' : batch_y ,
-                    'batch_x_mark' : batch_x_mark ,
-                    'batch_y_mark' : batch_y_mark ,
+                        "batch_x": batch_x,
+                        "batch_y": batch_y,
+                        "batch_x_mark": batch_x_mark,
+                        "batch_y_mark": batch_y_mark,
                     }
-
 
         preds = np.concatenate(preds, axis=0)
         trues = np.concatenate(trues, axis=0)
-        print('test shape:', preds.shape, trues.shape)
+        print("test shape:", preds.shape, trues.shape)
         preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
         trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
-        print('test shape:', preds.shape, trues.shape)
+        print("test shape:", preds.shape, trues.shape)
 
         # result save
-        folder_path = './results/' + setting + '/'
+        folder_path = "./results/" + setting + "/"
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
         # Compute model evaluation metrics
         mae, mse, rmse, mape, mspe = metric(preds, trues)
         all_metrics = np.array([mae, mse, rmse, mape, mspe])
-        print('mse:{}, mae:{}'.format(mse, mae))
-        f = open("result.txt", 'a')
+        print("mse:{}, mae:{}".format(mse, mae))
+        f = open("result.txt", "a")
         f.write(setting + "  \n")
-        f.write('mse:{}, mae:{}'.format(mse, mae))
-        f.write('\n')
-        f.write('\n')
+        f.write("mse:{}, mae:{}".format(mse, mae))
+        f.write("\n")
+        f.write("\n")
         f.close()
 
-        np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
-        np.save(folder_path + 'pred.npy', preds)
-        np.save(folder_path + 'true.npy', trues)
+        np.save(folder_path + "metrics.npy", np.array([mae, mse, rmse, mape, mspe]))
+        np.save(folder_path + "pred.npy", preds)
+        np.save(folder_path + "true.npy", trues)
 
         # Added returned variables - predictions and true values per window, as well as overall MSE and MAE scores and the first batch of the test set
-        return preds , trues ,mae, mape, mse , all_metrics, first_batch
+        return preds, trues, mae, mape, mse, all_metrics, first_batch
 
-    #Commented as this function is not used in our work
-    #def predict(self, setting, load=False):
-        #pred_data, pred_loader = self._get_data(flag='pred')
+    # Commented as this function is not used in our work
+    # def predict(self, setting, load=False):
+    # pred_data, pred_loader = self._get_data(flag='pred')
 
-        #if load:
-           #path = os.path.join(self.args.checkpoints, setting)
-            #best_model_path = path + '/' + 'checkpoint.pth'
-            #logging.info(best_model_path)
-            #self.model.load_state_dict(torch.load(best_model_path))
+    # if load:
+    # path = os.path.join(self.args.checkpoints, setting)
+    # best_model_path = path + '/' + 'checkpoint.pth'
+    # logging.info(best_model_path)
+    # self.model.load_state_dict(torch.load(best_model_path))
 
-        #preds = []
+    # preds = []
 
-        #self.model.eval()
-        #with torch.no_grad():
-            #for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(pred_loader):
-                #batch_x = batch_x.float().to(self.device)
-                #batch_y = batch_y.float()
-                #batch_x_mark = batch_x_mark.float().to(self.device)
-                #batch_y_mark = batch_y_mark.float().to(self.device)
+    # self.model.eval()
+    # with torch.no_grad():
+    # for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(pred_loader):
+    # batch_x = batch_x.float().to(self.device)
+    # batch_y = batch_y.float()
+    # batch_x_mark = batch_x_mark.float().to(self.device)
+    # batch_y_mark = batch_y_mark.float().to(self.device)
 
-                #outputs, batch_y = self._predict(batch_x, batch_y, batch_x_mark, batch_y_mark)
+    # outputs, batch_y = self._predict(batch_x, batch_y, batch_x_mark, batch_y_mark)
 
-                #pred = outputs.detach().cpu().numpy()  # .squeeze()
-                #preds.append(pred)
+    # pred = outputs.detach().cpu().numpy()  # .squeeze()
+    # preds.append(pred)
 
-        #preds = np.array(preds)
-        #preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
+    # preds = np.array(preds)
+    # preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
 
-        # result save
-        #folder_path = './results/' + setting + '/'
-        #if not os.path.exists(folder_path):
-            #os.makedirs(folder_path)
+    # result save
+    # folder_path = './results/' + setting + '/'
+    # if not os.path.exists(folder_path):
+    # os.makedirs(folder_path)
 
-        #np.save(folder_path + 'real_prediction.npy', preds)
+    # np.save(folder_path + 'real_prediction.npy', preds)
 
-        #return
+    # return
+
 
 ###########################################################################################################################
 # Our Simple User Interface ###############################################################################################
 
-class AutoformerTS():
-    '''
-    Our custom wrapper class to provide an user-friendly interface for fitting and testing of the Autoformer model. 
-    For simplicity of use, methods included align with naming used by Keras.  
-    '''
 
-    def __init__(self, model='Autoformer'):
+class AutoformerTS:
+    """
+    Our custom wrapper class to provide an user-friendly interface for fitting and testing of the Autoformer model.
+    For simplicity of use, methods included align with naming used by Keras.
+    """
+
+    def __init__(self, model="Autoformer"):
         # Currently only Autoformer is supported
-        if model != 'Autoformer':
+        if model != "Autoformer":
             raise ValueError("Model not supported. Please use 'Autoformer'.")
         # Initialize dot dictionary
         self.args = dotdict()
         self.args.model = model
-        self.args.target = 'TARGET'
-        self.args.des = 'test'
+        self.args.target = "TARGET"
+        self.args.des = "test"
         self.args.dropout = 0.05
         self.args.num_workers = 0
-        self.args.freq = 'h'
-        self.args.checkpoints = './checkpoints/'
+        self.args.freq = "h"
+        self.args.checkpoints = "./checkpoints/"
         self.args.bucket_size = 4
         self.args.n_hashes = 4
         self.args.is_trainging = True
-        self.args.root_path = './SYNTHDataset'
-        self.args.data_path ='SYNTHh1.csv' 
-        self.args.model = 'Autoformer'
-        self.args.data = 'Synth1'
-        self.args.features = 'S' #univariate
+        self.args.root_path = "./SYNTHDataset"
+        self.args.data_path = "SYNTHh1.csv"
+        self.args.model = "Autoformer"
+        self.args.data = "Synth1"
+        self.args.features = "S"  # univariate
         self.args.seq_len = 168
         self.args.label_len = 48
         self.args.pred_len = 24
@@ -2112,75 +2504,103 @@ class AutoformerTS():
         self.args.n_heads = 8
         self.args.factor = 1
         self.args.enc_in = 1
-        self.args.dec_in =1
+        self.args.dec_in = 1
         self.args.c_out = 1
         self.args.d_model = 512
-        self.args.des = 'Exp'
+        self.args.des = "Exp"
         self.args.itr = 3
         self.args.d_ff = 2048
         self.args.moving_avg = 25
         self.args.factor = 1
         self.args.distil = True
         self.args.output_attention = False
-        self.args.patience= 3
+        self.args.patience = 3
         self.args.learning_rate = 0.0001
-        self.args.batch_size = 32 # batch size 32 as in the paper
-        self.args.embed = 'timeF'
-        self.args.activation = 'gelu'
+        self.args.batch_size = 32  # batch size 32 as in the paper
+        self.args.embed = "timeF"
+        self.args.activation = "gelu"
         self.args.use_amp = False
-        self.args.loss = 'mse'
-        self.args.train_epochs = 10 # epoch size is 10 as in the paper   
-        self.args.lradj = 'type1'
-        # GPU 
+        self.args.loss = "mse"
+        self.args.train_epochs = 10  # epoch size is 10 as in the paper
+        self.args.lradj = "type1"
+        # GPU
         self.args.gpu = 0
-        self.args.devices = '0,1,2,3'
+        self.args.devices = "0,1,2,3"
         self.args.use_multi_gpu = False
-        self.args.use_gpu = True 
+        self.args.use_gpu = True
 
-        self.args.use_gpu = True if torch.cuda.is_available() and self.args.use_gpu else False
-        if self.args.use_gpu and self.args.use_multi_gpu: 
-            self.args.devices = self.args.devices.replace(' ', '')
-            device_ids = self.args.devices.split(',')
+        self.args.use_gpu = (
+            True if torch.cuda.is_available() and self.args.use_gpu else False
+        )
+        if self.args.use_gpu and self.args.use_multi_gpu:
+            self.args.devices = self.args.devices.replace(" ", "")
+            device_ids = self.args.devices.split(",")
             self.args.device_ids = [int(id_) for id_ in device_ids]
             self.args.gpu = self.args.device_ids[0]
 
-
-    def compile(self, learning_rate=1e-4, loss='mse', early_stopping_patience=3):
-        '''
+    def compile(self, learning_rate=1e-4, loss="mse", early_stopping_patience=3):
+        """
         Compiles the Autoformer model for training.
         Args:
             learning_rate (float): Learning rate to be used. Default: '1e-4'.
             loss (str): Loss function to be used. Default: 'mse'.
             early_stopping_patience (int): Amount of epochs to beak training loop after no validation performance improvement. Default: 3.
-        '''
-        if loss != 'mse':
+        """
+        if loss != "mse":
             raise ValueError("Loss function not supported. Please use 'mse'.")
         self.args.learning_rate = learning_rate
         self.args.loss = loss
         self.args.patience = early_stopping_patience
 
-    def fit(self, data='SYNTHh1', data_root_path='./SYNTHDataset/', batch_size=32, epochs=8, pred_len=24 , 
-            seq_len = 168 , features = 'S' , target = 'TARGET', enc_in = 1, dec_in = 1, c_out = 1 , iter = 1):
-        '''
+    def fit(
+        self,
+        data="SYNTHh1",
+        data_root_path="./SYNTHDataset/",
+        batch_size=32,
+        epochs=8,
+        pred_len=24,
+        seq_len=168,
+        features="S",
+        target="TARGET",
+        enc_in=1,
+        dec_in=1,
+        c_out=1,
+        iter=1,
+    ):
+        """
         Fits the Autoformer model.
         Args:
-            data (str): Name of the dataset used. For now, only 'SYNTHh1', 'SYNTHh2', 'DEWINDh_large' and 'DEWINDh_small' are supported. Default: 'SYNTHh1'. 
+            data (str): Name of the dataset used. For now, only 'SYNTHh1', 'SYNTHh2', 'DEWINDh_large' and 'DEWINDh_small' are supported. Default: 'SYNTHh1'.
             data_root_path (str): Root folder for given dataset. Default: './SYNTHDataset'.
             batch_size (int): Batch size. Default: 32.
             epochs (int): Number of epochs for training the model. Default: 8.
             pred_len (int): Prediction window length. Default: 24. Recommended: 24, 48, 168, 336,  720.
-        '''
+        """
         # temporary line
-        possible_datasets = ['SYNTHh1', 'SYNTHh2', 'SYNTH_additive' , 'SYNTH_additive_reversal' , 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small' , 'ETTh1']
+        possible_datasets = [
+            "SYNTHh1",
+            "SYNTHh2",
+            "SYNTH_additive",
+            "SYNTH_additive_reversal",
+            "SYNTH_multiplicative",
+            "SYNTH_multiplicative_reversal",
+            "DEWINDh_large",
+            "DEWINDh_small",
+            "ETTh1",
+        ]
         if data not in possible_datasets:
-            raise ValueError("Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reversal' 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small', 'ETTh1'.")
+            raise ValueError(
+                "Dataset not supported. Please use one of the following: 'SYNTHh1', 'SYNTHh2', SYNTH_additive', 'SYNTH_additive_reversal' 'SYNTH_multiplicative', 'SYNTH_multiplicative_reversal' , 'DEWINDh_large', 'DEWINDh_small', 'ETTh1'."
+            )
         # temporary line
         possible_predlens = [24, 48, 168, 336, 720]
         if pred_len not in possible_predlens:
-            raise ValueError('Prediction length outside current experiment scope. Please use either 24, 48, 168, 336, 720.')
+            raise ValueError(
+                "Prediction length outside current experiment scope. Please use either 24, 48, 168, 336, 720."
+            )
         self.args.data = data
         self.args.root_path = data_root_path
-        self.args.data_path = f'{self.args.data}.csv'
+        self.args.data_path = f"{self.args.data}.csv"
         self.args.train_epochs = epochs
         self.args.batch_size = batch_size
         self.args.seq_len = seq_len
@@ -2191,35 +2611,60 @@ class AutoformerTS():
         self.args.dec_in = dec_in
         self.args.c_out = c_out
         self.args.iter = iter
-       #self.args.detail_freq = self.args.freq
-       #self.args.freq = self.args.freq[-1:]
-        
-        print('Beginning to fit the model with the following arguments:')
-        print(f'{self.args}')
-        print('='*150)
+        # self.args.detail_freq = self.args.freq
+        # self.args.freq = self.args.freq[-1:]
+
+        print("Beginning to fit the model with the following arguments:")
+        print(f"{self.args}")
+        print("=" * 150)
         # Set up model variable
         Experiment_Model = Exp_Autoformer
         # Set up training settings
-        self.setting = '{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_iter{}'.format(
-        self.args.model, self.args.data, self.args.features, self.args.seq_len, self.args.label_len, self.args.pred_len,
-        self.args.d_model, self.args.n_heads, self.args.e_layers, self.args.d_layers, self.args.d_ff, self.args.factor, self.args.embed, self.args.distil, self.args.des, self.args.iter)
+        self.setting = "{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_fc{}_eb{}_dt{}_{}_iter{}".format(
+            self.args.model,
+            self.args.data,
+            self.args.features,
+            self.args.seq_len,
+            self.args.label_len,
+            self.args.pred_len,
+            self.args.d_model,
+            self.args.n_heads,
+            self.args.e_layers,
+            self.args.d_layers,
+            self.args.d_ff,
+            self.args.factor,
+            self.args.embed,
+            self.args.distil,
+            self.args.des,
+            self.args.iter,
+        )
         # Initialize Model Class
         self.experiment_model = Experiment_Model(self.args)
         # Train
-        print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(self.setting))
+        print(
+            ">>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>".format(self.setting)
+        )
         self.model = self.experiment_model.train(self.setting)
 
     def predict(self):
-        '''
+        """
         Makes predictions on pre-defined test set. Does not require any arguments.
         Returns:
             preds: A 3D array of predictions of the following shape (number of windows, number of time points per window, number of targets.)
-            As self variables, trues, mse, mae, all_metrics, and first_batch_test can also be called. 
-        '''
-        #if not self.model:
-            #raise ValueError('No model trained. Make sure to run .fit() first.')
+            As self variables, trues, mse, mae, all_metrics, and first_batch_test can also be called.
+        """
+        # if not self.model:
+        # raise ValueError('No model trained. Make sure to run .fit() first.')
         # Predict
-        self.preds, self.trues, self.mse, self.mae, self.mape, self.all_metrics, self.first_batch_test = self.experiment_model.test(self.setting)
+        (
+            self.preds,
+            self.trues,
+            self.mse,
+            self.mae,
+            self.mape,
+            self.all_metrics,
+            self.first_batch_test,
+        ) = self.experiment_model.test(self.setting)
         # Clear memory
         torch.cuda.empty_cache()
         return self.preds
