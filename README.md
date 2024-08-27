@@ -31,6 +31,20 @@
 
 - `results/`
 
+### Our Synthetic Data (Extended from Liu et al. 2023, Pyraformer)
+
+![Synthetic time series with trends](/plots/synth_series_trends.png)
+
+### Forecasting Results
+
+#### Multivariate
+
+![Multivariate forecasting results](/plots/multivariate_forecasting.png)
+
+#### Univariate
+
+![Univariate forecasting results](/plots/univariate_forecasting.png)
+
 - - -
 
 ## For Transparency
